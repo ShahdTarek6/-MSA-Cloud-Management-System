@@ -79,6 +79,3 @@ Follow the on-screen menu to perform operations like:
 * Managing Docker images/containers
 * Interacting with DockerHub
 
----
-
-هل تحبي أساعدك أكمّل ملفات `UserManual.md` أو `Report.md` كمان؟
