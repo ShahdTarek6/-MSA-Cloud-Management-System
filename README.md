@@ -70,7 +70,7 @@ This tool helps users to:
 ```bash
 git clone https://github.com/YourUsername/msa-cloud-management.git
 cd msa-cloud-management
-python main.py  # or bash run.sh if you're using shell scripting
+
 ```
 
 Follow the on-screen menu to perform operations like:
