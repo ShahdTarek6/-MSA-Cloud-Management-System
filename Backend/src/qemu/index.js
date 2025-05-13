@@ -7,6 +7,7 @@ const router = express.Router();
 // Import QEMU routes
 const VMAPIs = require('./VMAPIs');
 const VDAPIs = require('./VDAPIs');
+const ISOAPIs = require('./ISOAPIs');
 
 // Create necessary directories relative to Backend folder
 const BACKEND_DIR = path.resolve(__dirname, '.');
@@ -30,5 +31,6 @@ const paths = {
 // Mount QEMU routes
 router.use('/vms', VMAPIs);
 router.use('/disks', VDAPIs);
+router.use('/iso', ISOAPIs);
 
 module.exports = { router, paths };

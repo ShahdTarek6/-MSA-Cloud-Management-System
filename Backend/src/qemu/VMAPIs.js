@@ -3,7 +3,6 @@ const router = express.Router();
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-
 const BACKEND_DIR = path.resolve(__dirname, '.');
 const VM_DIR = path.join(BACKEND_DIR, 'vms');
 const DISK_DIR = path.join(BACKEND_DIR, 'disks');
@@ -81,11 +80,7 @@ router.get('/list', (req, res) => {
   res.json(vmList);
 });
 
-// List ISO files
-router.get('/iso/list', (req, res) => {
-  const files = fs.readdirSync(ISO_DIR).filter(file => file.toLowerCase().endsWith('.iso'));
-  res.json(files);
-});
+
 
 // Delete VM
 router.delete('/delete/:name', (req, res) => {
