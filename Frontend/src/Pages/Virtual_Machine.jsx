@@ -3,14 +3,14 @@ import axios from 'axios';
 import SideBar from '../component/SideBar';
 
 function VirtualMachine() {
-  const [vmList, setVmList] = useState([]);
+  const [vmList, setVmList] = useState([]);  
   const [formData, setFormData] = useState({
     name: '',
     cpu: 1,
     memory: 1024,
     diskName: '',
     format: 'qcow2',
-    iso: './alpine-virt-3.21.3-x86_64.iso',
+    iso: '',
   });
 
   const [isoFiles, setIsoFiles] = useState([]);
@@ -23,10 +23,21 @@ function VirtualMachine() {
     } catch (error) {
       console.error('Error fetching VMs:', error);
     }
+  };  const fetchIsoFiles = async () => {
+    try {
+      const response = await axios.get('http://localhost:3000/api/qemu/vms/iso/list');
+      setIsoFiles(response.data);
+      if (response.data.length > 0) {
+        console.log('Available ISO files:', response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching ISO files:', error);
+    }
   };
 
   useEffect(() => {
     fetchData();
+    fetchIsoFiles();
   }, []);
 
   const handleChange = (e) => {
@@ -141,6 +152,22 @@ function VirtualMachine() {
               <option value="raw">RAW</option>
               <option value="vdi">VDI</option>
               <option value="vpc">VPC</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="iso">ISO Image (Optional):</label>
+            <select
+              id="iso"
+              name="iso"
+              value={formData.iso}
+              onChange={handleChange}
+              className="w-full p-2 border rounded-lg"
+            >
+              <option value="">No ISO</option>
+              {isoFiles.map((iso, index) => (
+                <option key={index} value={iso}>{iso}</option>
+              ))}
             </select>
           </div>
 

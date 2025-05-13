@@ -81,6 +81,12 @@ router.get('/list', (req, res) => {
   res.json(vmList);
 });
 
+// List ISO files
+router.get('/iso/list', (req, res) => {
+  const files = fs.readdirSync(ISO_DIR).filter(file => file.toLowerCase().endsWith('.iso'));
+  res.json(files);
+});
+
 // Delete VM
 router.delete('/delete/:name', (req, res) => {
   const name = req.params.name;
