@@ -40,7 +40,7 @@ function VirtualDisk() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:3000/create-disk', diskData);
+      const res = await axios.post('http://localhost:3000/api/qemu/disks/create-disk', diskData);
       console.log(res.data);
       alert('Disk created successfully!');
       setShowForm(false);
