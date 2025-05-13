@@ -3,7 +3,7 @@ import axios from 'axios';
 import SideBar from '../component/SideBar';
 
 function VirtualMachine() {
-  const  [vmList, setVmList] = useState([]);
+  const [vmList, setVmList] = useState([]);
   const [formData, setFormData] = useState({
     name: '',
     cpu: 1,
@@ -18,14 +18,13 @@ function VirtualMachine() {
 
   const fetchData = async () => {
     try {
-      const response = await axios.get('http://localhost:3000/list-vms'); // Example endpoint
+      const response = await axios.get('http://localhost:3000/api/qemu/vms/list');
       setVmList(response.data);
     } catch (error) {
-      console.error('Error fetching disks:', error);
+      console.error('Error fetching VMs:', error);
     }
   };
 
-  // Call fetchData when the component is mounted
   useEffect(() => {
     fetchData();
   }, []);
@@ -42,10 +41,10 @@ function VirtualMachine() {
     e.preventDefault();
 
     try {
-      const response = await axios.post('http://localhost:3000/create-vm', formData);
+      const response = await axios.post('http://localhost:3000/api/qemu/vms/create', formData);
       alert(response.data.message);
-      setShowForm(false); // Close the form
-      fetchData(); // Refresh VM list
+      setShowForm(false);
+      fetchData();
     } catch (error) {
       alert(`Error: ${error.response?.data?.error || 'Unknown error'}`);
     }
@@ -53,12 +52,10 @@ function VirtualMachine() {
 
   const deleteVm = async (name) => {
     try {
-
-      await axios.delete(`http://localhost:3000/delete-vm/${name}`);
-      // Reload the disk list after successful deletion
+      await axios.delete(`http://localhost:3000/api/qemu/vms/delete/${name}`);
       fetchData();
     } catch (error) {
-      console.error('Error deleting disk:', error);
+      console.error('Error deleting VM:', error);
     }
   };
 
@@ -180,7 +177,7 @@ function VirtualMachine() {
 
                 <button
                   className="ml-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all"
-                  onClick={() => deleteVm(vm.name)} // You can implement delete functionality here
+                  onClick={() => deleteVm(vm.name)}
                 >
                   Delete VM
                 </button>
