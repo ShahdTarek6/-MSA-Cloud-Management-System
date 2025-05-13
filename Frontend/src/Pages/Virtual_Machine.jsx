@@ -4,6 +4,7 @@ import SideBar from '../component/SideBar';
 
 function VirtualMachine() {
   const [vmList, setVmList] = useState([]);  
+  const [diskList, setDiskList] = useState([]);
   const [formData, setFormData] = useState({
     name: '',
     cpu: 1,
@@ -23,7 +24,9 @@ function VirtualMachine() {
     } catch (error) {
       console.error('Error fetching VMs:', error);
     }
-  };  const fetchIsoFiles = async () => {
+  };
+
+  const fetchIsoFiles = async () => {
     try {
       const response = await axios.get('http://localhost:3000/api/qemu/vms/iso/list');
       setIsoFiles(response.data);
@@ -35,9 +38,19 @@ function VirtualMachine() {
     }
   };
 
+  const fetchDisks = async () => {
+    try {
+      const response = await axios.get('http://localhost:3000/api/qemu/disks/list');
+      setDiskList(response.data);
+    } catch (error) {
+      console.error('Error fetching disks:', error);
+    }
+  };
+
   useEffect(() => {
     fetchData();
     fetchIsoFiles();
+    fetchDisks();
   }, []);
 
   const handleChange = (e) => {
@@ -122,40 +135,29 @@ function VirtualMachine() {
               required
               className="w-full p-2 border rounded-lg"
             />
-          </div>
-
-          <div>
-            <label htmlFor="diskName">Disk Name:</label>
-            <input
-              type="text"
+          </div>          <div>
+            <label htmlFor="diskName">Virtual Disk:</label>
+            <select
               id="diskName"
               name="diskName"
               value={formData.diskName}
-              onChange={handleChange}
-              required
-              className="w-full p-2 border rounded-lg"
-            />
-          </div>
-
-          <div>
-            <label htmlFor="format">Disk Format:</label>
-            <select
-              id="format"
-              name="format"
-              value={formData.format}
-              onChange={handleChange}
+              onChange={(e) => {
+                const selectedDisk = diskList.find(disk => disk.name === e.target.value);
+                setFormData(prev => ({
+                  ...prev,
+                  diskName: e.target.value,
+                  format: selectedDisk ? selectedDisk.format : prev.format
+                }));
+              }}
               required
               className="w-full p-2 border rounded-lg"
             >
-              <option value="qcow2">QCOW2</option>
-              <option value="vmdk">VMDK</option>
-              <option value="raw">RAW</option>
-              <option value="vdi">VDI</option>
-              <option value="vpc">VPC</option>
+              <option value="">Select a disk</option>
+              {diskList.map((disk, index) => (
+                <option key={index} value={disk.name}>{disk.name} ({disk.format} - {disk.size}GB)</option>
+              ))}
             </select>
-          </div>
-
-          <div>
+          </div>          <div>
             <label htmlFor="iso">ISO Image (Optional):</label>
             <select
               id="iso"
