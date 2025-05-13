@@ -12,10 +12,9 @@ function VirtualDisk() {
     type: 'dynamic', // default allocation
     
   });
-
   const fetchData = async () => {
     try {
-      const response = await axios.get('http://localhost:3000/list-disks'); // Example endpoint
+      const response = await axios.get('http://localhost:3000/api/qemu/disks/list');
       setDiskList(response.data);
     } catch (error) {
       console.error('Error fetching disks:', error);
@@ -36,25 +35,22 @@ function VirtualDisk() {
       [name]: value
     }));
   };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:3000/api/qemu/disks/create-disk', diskData);
+      const res = await axios.post('http://localhost:3000/api/qemu/disks/create', diskData);
       console.log(res.data);
       alert('Disk created successfully!');
       setShowForm(false);
       fetchData(); // hide form after submission
     } catch (err) {
       console.error(err);
-      alert('Error creating disk.');
+      alert('Error creating disk: ' + (err.response?.data?.error || err.message));
     }
   };
-
   const deleteDisk = async (filename, format) => {
     try {
-
-      await axios.delete(`http://localhost:3000/delete-disk/${filename}.${format}`);
+      await axios.delete(`http://localhost:3000/api/qemu/disks/delete/${filename}.${format}`);
       // Reload the disk list after successful deletion
       fetchData();
     } catch (error) {

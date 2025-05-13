@@ -5,12 +5,19 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const DISK_DIR = path.resolve(__dirname, '..', '..', '..', 'disks');
+const BACKEND_DIR = path.resolve(__dirname, '.');
+const DISK_DIR = path.join(BACKEND_DIR, 'disks');
 
 const RESIZE_SUPPORTED_FORMATS = ['qcow2', 'raw', 'vmdk'];
 const SUPPORTED_FORMATS = ['qcow2', 'vmdk', 'raw', 'vdi', 'vpc'];
 const DYNAMIC_ONLY_FORMATS = ['vdi', 'vpc'];
 const FIXED_UNSUPPORTED_ON_WINDOWS = ['qcow2'];
+
+// Ensure disk directory exists
+if (!fs.existsSync(DISK_DIR)) {
+  console.log('📁 Creating disk directory:', DISK_DIR);
+  fs.mkdirSync(DISK_DIR, { recursive: true });
+}
 
 // Create Disk
 router.post('/create', (req, res) => {
@@ -196,6 +203,15 @@ router.put('/update/:filename', (req, res) => {
   }
 
   res.json({ message: `✅ Disk "${oldFilename}" successfully renamed to "${newFilename}".` });
+});
+
+// Add error handling middleware
+router.use((err, req, res, next) => {
+  console.error('🔴 Error in disk operation:', err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal server error',
+    details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
 });
 
 module.exports = router;

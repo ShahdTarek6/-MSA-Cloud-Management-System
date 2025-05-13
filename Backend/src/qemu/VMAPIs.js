@@ -4,9 +4,18 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const VM_DIR = path.resolve(__dirname, '..', '..', '..', 'vms');
-const DISK_DIR = path.resolve(__dirname, '..', '..', '..', 'disks');
-const ISO_DIR = path.resolve(__dirname, '..', '..', '..', 'iso');
+const BACKEND_DIR = path.resolve(__dirname, '.');
+const VM_DIR = path.join(BACKEND_DIR, 'vms');
+const DISK_DIR = path.join(BACKEND_DIR, 'disks');
+const ISO_DIR = path.join(BACKEND_DIR, 'iso');
+
+// Ensure required directories exist
+[VM_DIR, DISK_DIR, ISO_DIR].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log(`Created directory: ${dir}`);
+  }
+});
 
 // Create VM
 router.post('/create', (req, res) => {

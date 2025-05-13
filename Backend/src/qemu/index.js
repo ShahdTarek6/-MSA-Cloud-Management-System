@@ -8,10 +8,11 @@ const router = express.Router();
 const VMAPIs = require('./VMAPIs');
 const VDAPIs = require('./VDAPIs');
 
-// Create necessary directories
-const DISK_DIR = path.resolve(__dirname, '..', '..', '..', 'disks');
-const ISO_DIR = path.resolve(__dirname, '..', '..', '..', 'iso');
-const VM_DIR = path.resolve(__dirname, '..', '..', '..', 'vms');
+// Create necessary directories relative to Backend folder
+const BACKEND_DIR = path.resolve(__dirname, '.');
+const DISK_DIR = path.join(BACKEND_DIR, 'disks');
+const ISO_DIR = path.join(BACKEND_DIR, 'iso');
+const VM_DIR = path.join(BACKEND_DIR, 'vms');
 
 [DISK_DIR, ISO_DIR, VM_DIR].forEach(dir => {
   if (!fs.existsSync(dir)) {
@@ -19,8 +20,15 @@ const VM_DIR = path.resolve(__dirname, '..', '..', '..', 'vms');
   }
 });
 
+// Export directory paths for other modules to use
+const paths = {
+  DISK_DIR,
+  ISO_DIR,
+  VM_DIR
+};
+
 // Mount QEMU routes
 router.use('/vms', VMAPIs);
 router.use('/disks', VDAPIs);
 
-module.exports = router;
+module.exports = { router, paths };
