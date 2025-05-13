@@ -11,3 +11,5 @@ export default function Notification({ show, message, type }) {
     </div>
   );
 }
+
+export { Notification };

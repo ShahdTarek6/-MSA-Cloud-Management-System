@@ -1,11 +1,10 @@
-import { useState } from 'react'
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import reactLogo from './assets/react.svg'
-import VirtualDisk from './Pages/Virtual_Disk';
-import viteLogo from '/vite.svg'
 import './App.css'
 import SideBar from './component/SideBar';
+import VirtualDisk from './Pages/Virtual_Disk';
 import VirtualMachine from './Pages/Virtual_Machine';
+import DockerContainers from './Pages/Docker_Containers';
+import DockerImages from './Pages/Docker_Images';
 
 function App() {
   return (
@@ -17,10 +16,11 @@ function App() {
         </div>
 
         {/* Content - 2/3 */}
-        <div className="w-5/6 bg-gray-100 overflow-y-auto p-6">
-          <Routes>
+        <div className="w-5/6 bg-gray-100 overflow-y-auto p-6">          <Routes>
             <Route path="/virtual-disk" element={<VirtualDisk />} />
-            <Route path="/virtual-Machine" element={<VirtualMachine />} />
+            <Route path="/virtual-machine" element={<VirtualMachine />} />
+            <Route path="/docker-containers" element={<DockerContainers />} />
+            <Route path="/docker-images" element={<DockerImages />} />
           </Routes>
         </div>
       </div>
