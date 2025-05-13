@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
-import SideBar from '../component/SideBar';
+import { LoadingSpinner, EmptyState, PageHeader } from '../component/CommonComponents';
+import { VMCard } from '../component/VMCard';
 import Modal from '../component/Modal';
+import { CreateVMForm } from '../component/VMForm';
 import Button from '../component/Button';
+import Notification from '../component/Notification';
 import FormInput from '../component/FormInput';
-import Select from '../component/Select';
 
 function VirtualMachine() {
   const [vmList, setVmList] = useState([]);
@@ -96,16 +98,18 @@ function VirtualMachine() {
   };
 
   const deleteVm = async (name) => {
+    if (!name) return;
+    
     setIsLoading(true);
     try {
       await axios.delete(`http://localhost:3000/api/qemu/vms/delete/${name}`);
       showNotification('Virtual Machine deleted successfully!');
+      setDeleteConfirm(null);
       fetchData();
     } catch (error) {
       showNotification(error.response?.data?.error || 'Error deleting VM', 'error');
     } finally {
       setIsLoading(false);
-      setDeleteConfirm(null);
     }
   };
 
@@ -135,10 +139,13 @@ function VirtualMachine() {
     }
   };
 
-  const handleISOUpload = async (file) => {
+  const handleISOUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
     setIsUploading(true);
-    setUploadStatus('Uploading...');
     setUploadError('');
+    setUploadStatus('Uploading...');
 
     const formData = new FormData();
     formData.append('iso', file);
@@ -147,21 +154,23 @@ function VirtualMachine() {
       await axios.post('http://localhost:3000/api/qemu/iso/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-        },
+        }
       });
       setUploadStatus('Upload successful!');
+      // Refresh ISO files list
       await fetchIsoFiles();
+      // Set the uploaded file as the selected ISO
+      handleChange({
+        target: {
+          name: 'iso',
+          value: file.name
+        }
+      });
     } catch (error) {
-      const errorMsg = error.response?.data?.error || 'Failed to upload ISO file';
-      setUploadError(errorMsg);
-      console.error('Error uploading ISO:', error);
+      setUploadError(error.response?.data?.error || 'Error uploading ISO file');
+      setUploadStatus('');
     } finally {
       setIsUploading(false);
-      // Clear status after 3 seconds
-      setTimeout(() => {
-        setUploadStatus('');
-        setUploadError('');
-      }, 3000);
     }
   };
 
@@ -182,357 +191,96 @@ function VirtualMachine() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      {/* Notification Toast */}
-      {notification.show && (
-        <div className={`fixed top-4 right-4 p-4 rounded-lg shadow-lg ${
-          notification.type === 'error' ? 'bg-red-500' : 'bg-green-500'
-        } text-white transition-all transform duration-300 ease-in-out`}>
-          {notification.message}
-        </div>
-      )}
+      <Notification {...notification} />
 
-      <div className="max-w-7xl mx-auto">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Virtual Machines</h1>
-          <button
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-md flex items-center gap-2"
-            onClick={() => setShowForm(true)}
-            disabled={isLoading}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-            </svg>
-            Create Virtual Machine
-          </button>
-        </div>
-
-        {/* Loading State */}
-        {isLoading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          </div>
-        ) : (
-          <>
-            {/* VM Grid */}
-            {vmList.length === 0 ? (
-              <div className="text-center py-12 bg-white rounded-lg shadow-sm">
-                <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+      <div className="max-w-7xl mx-auto space-y-6">
+        <PageHeader
+          title="Virtual Machines"
+          action={
+            <Button
+              variant="primary"
+              onClick={() => setShowForm(true)}
+              disabled={isLoading}
+            >
+              <span className="flex items-center">
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                 </svg>
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No Virtual Machines</h3>
-                <p className="mt-1 text-sm text-gray-500">Get started by creating a new virtual machine.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {vmList.map((vm, index) => (
-                  <div
-                    key={index}
-                    className="bg-white rounded-lg shadow-sm hover:shadow-md transition-all p-6 border border-gray-200"
-                  >
-                    <div className="flex flex-col space-y-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="text-xl font-semibold text-gray-900">{vm.name}</h3>
-                          <div className="mt-4 space-y-2">
-                            <p className="text-sm text-gray-600">
-                              <span className="font-medium text-gray-900">Status:</span>{' '}
-                              <span className={`inline-block px-2 py-1 rounded-full text-xs ${
-                                vm.status === 'running' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                              }`}>
-                                {vm.status || 'stopped'}
-                              </span>
-                            </p>
-                            <p className="text-sm text-gray-600">
-                              <span className="font-medium text-gray-900">CPU:</span> {vm.cpu} Cores
-                            </p>
-                            <p className="text-sm text-gray-600">
-                              <span className="font-medium text-gray-900">Memory:</span> {vm.memory} MB
-                            </p>
-                            <p className="text-sm text-gray-600">
-                              <span className="font-medium text-gray-900">Disk:</span> {vm.diskName}
-                            </p>
-                            <p className="text-sm text-gray-600">
-                              <span className="font-medium text-gray-900">Format:</span> {vm.format}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex justify-end items-center gap-2">
-                        <Button
-                          variant="secondary"
-                          onClick={() => setEditVM(vm)}
-                          title="Edit VM"
-                          className="p-2"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </Button>
-                        <Button
-                          variant="primary"
-                          onClick={() => startVM(vm.name)}
-                          title="Start VM"
-                          className="p-2"
-                          disabled={vm.status === 'running'}
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </Button>
-                        <Button
-                          variant="warning"
-                          onClick={() => stopVM(vm.name)}
-                          title="Stop VM"
-                          className="p-2"
-                          disabled={vm.status !== 'running'}
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 10h6v6H9z" />
-                          </svg>
-                        </Button>
-                        <Button
-                          variant="danger"
-                          onClick={() => setDeleteConfirm(vm.name)}
-                          title="Delete VM"
-                          className="p-2"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
+                Create Virtual Machine
+              </span>
+            </Button>
+          }
+        />
 
-        {/* Create VM Modal */}
-        {showForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900">Create Virtual Machine</h2>
-                  <button
-                    onClick={() => setShowForm(false)}
-                    className="text-gray-400 hover:text-gray-600"
-                  >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
+        <div className="w-full">
+          {isLoading ? (
+            <LoadingSpinner />
+          ) : vmList.length === 0 ? (
+            <EmptyState
+              title="No Virtual Machines"
+              description="Get started by creating a new virtual machine."
+              icon="vm"
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-4">
+              {vmList.map((vm, index) => (
+                <VMCard
+                  key={vm.name || index}
+                  vm={vm}
+                  onEdit={setEditVM}
+                  onStart={startVM}
+                  onStop={stopVM}
+                  onDelete={setDeleteConfirm}
+                />
+              ))}
+            </div>
+          )}
+        </div>
 
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* Form Fields */}
-                  <div className="space-y-4">
-                    <div>
-                      <label htmlFor="name" className="block text-sm font-medium text-gray-700">VM Name</label>
-                      <input
-                        type="text"
-                        id="name"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleChange}
-                        required
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter VM name"
-                      />
-                    </div>
+        <Modal
+          isOpen={showForm}
+          onClose={() => setShowForm(false)}
+          title="Create Virtual Machine"
+        >
+          <CreateVMForm
+            formData={formData}
+            diskList={diskList}
+            isoFiles={isoFiles}
+            onSubmit={handleSubmit}
+            onCancel={() => setShowForm(false)}
+            isUploading={isUploading}
+            uploadStatus={uploadStatus}
+            uploadError={uploadError}
+            handleChange={handleChange}
+            handleISOUpload={handleISOUpload}
+            isLoading={isLoading}
+          />
+        </Modal>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label htmlFor="cpu" className="block text-sm font-medium text-gray-700">CPU Cores</label>
-                        <input
-                          type="number"
-                          id="cpu"
-                          name="cpu"
-                          value={formData.cpu}
-                          onChange={handleChange}
-                          min="1"
-                          required
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label htmlFor="memory" className="block text-sm font-medium text-gray-700">Memory (MB)</label>
-                        <input
-                          type="number"
-                          id="memory"
-                          name="memory"
-                          value={formData.memory}
-                          onChange={handleChange}
-                          min="512"
-                          required
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Virtual Disk Selection */}
-                    <div>
-                      <label htmlFor="diskName" className="block text-sm font-medium text-gray-700">Virtual Disk</label>
-                      <select
-                        id="diskName"
-                        name="diskName"
-                        value={formData.diskName}
-                        onChange={(e) => {
-                          const selectedDisk = diskList.find(disk => disk.name === e.target.value);
-                          setFormData(prev => ({
-                            ...prev,
-                            diskName: e.target.value,
-                            format: selectedDisk ? selectedDisk.format : prev.format
-                          }));
-                        }}
-                        required
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select a disk</option>
-                        {diskList.map((disk, index) => (
-                          <option key={index} value={disk.name}>
-                            {disk.name} ({disk.format} - {disk.size}GB)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* ISO Image Section */}
-                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-medium text-gray-900">ISO Image</h3>
-                        <span className="text-xs text-gray-500">Optional</span>
-                      </div>
-
-                      {/* Upload Area */}
-                      <div className="space-y-4">
-                        <label
-                          htmlFor="isoFile"
-                          className={`relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors
-                            ${isUploading ? 'bg-gray-50 border-gray-300' : 'hover:bg-gray-50 border-gray-300 hover:border-blue-500'}`}
-                        >
-                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                            {isUploading ? (
-                              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                            ) : (
-                              <>
-                                <svg className="w-8 h-8 mb-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                                </svg>
-                                <p className="mb-2 text-sm text-gray-500">
-                                  <span className="font-semibold">Click to upload</span> or drag and drop
-                                </p>
-                                <p className="text-xs text-gray-500">.iso files only</p>
-                              </>
-                            )}
-                          </div>
-                          <input
-                            type="file"
-                            id="isoFile"
-                            accept=".iso"
-                            className="hidden"
-                            disabled={isUploading}
-                            onChange={(e) => {
-                              if (e.target.files?.[0]) {
-                                handleISOUpload(e.target.files[0]);
-                                e.target.value = '';
-                              }
-                            }}
-                          />
-                        </label>
-
-                        {/* Upload Status */}
-                        {(uploadStatus || uploadError) && (
-                          <div className={`text-sm ${uploadError ? 'text-red-600' : 'text-green-600'} flex items-center gap-2`}>
-                            {uploadError ? (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            ) : (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                              </svg>
-                            )}
-                            {uploadError || uploadStatus}
-                          </div>
-                        )}
-
-                        {/* ISO Selection */}
-                        <div>
-                          <select
-                            id="iso"
-                            name="iso"
-                            value={formData.iso}
-                            onChange={handleChange}
-                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="">No ISO</option>
-                            {isoFiles.map((iso, index) => (
-                              <option key={index} value={iso}>{iso}</option>
-                            ))}
-                          </select>
-                          {isoFiles.length === 0 && (
-                            <p className="mt-2 text-sm text-gray-500">
-                              No ISO files available. Upload one using the form above.
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Form Actions */}
-                  <div className="flex justify-end gap-3 pt-4 border-t">
-                    <button
-                      type="button"
-                      onClick={() => setShowForm(false)}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    >
-                      Create VM
-                    </button>
-                  </div>
-                </form>
-              </div>
+        <Modal
+          isOpen={!!deleteConfirm}
+          onClose={() => setDeleteConfirm(null)}
+          title="Delete Virtual Machine"
+        >
+          <div className="space-y-4">
+            <p className="text-gray-600">
+              Are you sure you want to delete the virtual machine "{deleteConfirm?.name}"? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-4">
+              <Button variant="secondary" onClick={() => setDeleteConfirm(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => deleteVm(deleteConfirm.name)}
+                disabled={isLoading}
+              >
+                Delete VM
+              </Button>
             </div>
           </div>
-        )}
+        </Modal>
 
-        {/* Delete Confirmation Modal */}
-        {deleteConfirm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full">
-              <h3 className="text-xl font-semibold mb-4">Confirm Deletion</h3>
-              <p className="text-gray-600 mb-6">Are you sure you want to delete the virtual machine "{deleteConfirm}"? This action cannot be undone.</p>
-              <div className="flex justify-end space-x-4">
-                <button
-                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-all"
-                  onClick={() => setDeleteConfirm(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all"
-                  onClick={() => deleteVm(deleteConfirm)}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Edit VM Modal */}
         <Modal
           isOpen={!!editVM}
           onClose={() => setEditVM(null)}
