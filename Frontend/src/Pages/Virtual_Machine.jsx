@@ -1,6 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import SideBar from '../component/SideBar';
+import Modal from '../component/Modal';
+import Button from '../component/Button';
+import FormInput from '../component/FormInput';
+import Select from '../component/Select';
 
 function VirtualMachine() {
   const [vmList, setVmList] = useState([]);
@@ -22,13 +26,14 @@ function VirtualMachine() {
   const [isLoading, setIsLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
+  const [editVM, setEditVM] = useState(null);
 
   const showNotification = (message, type = 'success') => {
     setNotification({ show: true, message, type });
     setTimeout(() => setNotification({ show: false, message: '', type: '' }), 3000);
   };
 
-  const fetchData = React.useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await axios.get('http://localhost:3000/api/qemu/vms/list');
@@ -104,6 +109,32 @@ function VirtualMachine() {
     }
   };
 
+  const startVM = async (name) => {
+    setIsLoading(true);
+    try {
+      await axios.post(`http://localhost:3000/api/qemu/vms/start/${name}`);
+      showNotification('Virtual Machine started successfully!');
+      fetchData();
+    } catch (error) {
+      showNotification(error.response?.data?.error || 'Error starting VM', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const stopVM = async (name) => {
+    setIsLoading(true);
+    try {
+      await axios.post(`http://localhost:3000/api/qemu/vms/stop/${name}`);
+      showNotification('Virtual Machine stopped successfully!');
+      fetchData();
+    } catch (error) {
+      showNotification(error.response?.data?.error || 'Error stopping VM', 'error');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleISOUpload = async (file) => {
     setIsUploading(true);
     setUploadStatus('Uploading...');
@@ -131,6 +162,21 @@ function VirtualMachine() {
         setUploadStatus('');
         setUploadError('');
       }, 3000);
+    }
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      await axios.put(`http://localhost:3000/api/qemu/vms/update/${editVM.name}`, editVM);
+      showNotification('Virtual Machine updated successfully!');
+      setEditVM(null);
+      fetchData();
+    } catch (error) {
+      showNotification(error.response?.data?.error || 'Error updating VM', 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -183,33 +229,80 @@ function VirtualMachine() {
                     key={index}
                     className="bg-white rounded-lg shadow-sm hover:shadow-md transition-all p-6 border border-gray-200"
                   >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="text-xl font-semibold text-gray-900">{vm.name}</h3>
-                        <div className="mt-4 space-y-2">
-                          <p className="text-sm text-gray-600">
-                            <span className="font-medium text-gray-900">CPU:</span> {vm.cpu} Cores
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            <span className="font-medium text-gray-900">Memory:</span> {vm.memory} MB
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            <span className="font-medium text-gray-900">Disk:</span> {vm.diskName}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            <span className="font-medium text-gray-900">Format:</span> {vm.format}
-                          </p>
+                    <div className="flex flex-col space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="text-xl font-semibold text-gray-900">{vm.name}</h3>
+                          <div className="mt-4 space-y-2">
+                            <p className="text-sm text-gray-600">
+                              <span className="font-medium text-gray-900">Status:</span>{' '}
+                              <span className={`inline-block px-2 py-1 rounded-full text-xs ${
+                                vm.status === 'running' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {vm.status || 'stopped'}
+                              </span>
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              <span className="font-medium text-gray-900">CPU:</span> {vm.cpu} Cores
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              <span className="font-medium text-gray-900">Memory:</span> {vm.memory} MB
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              <span className="font-medium text-gray-900">Disk:</span> {vm.diskName}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                              <span className="font-medium text-gray-900">Format:</span> {vm.format}
+                            </p>
+                          </div>
                         </div>
                       </div>
-                      <button
-                        onClick={() => setDeleteConfirm(vm.name)}
-                        className="text-gray-400 hover:text-red-600 transition-colors"
-                        title="Delete VM"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
+                      <div className="flex justify-end items-center gap-2">
+                        <Button
+                          variant="secondary"
+                          onClick={() => setEditVM(vm)}
+                          title="Edit VM"
+                          className="p-2"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </Button>
+                        <Button
+                          variant="primary"
+                          onClick={() => startVM(vm.name)}
+                          title="Start VM"
+                          className="p-2"
+                          disabled={vm.status === 'running'}
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </Button>
+                        <Button
+                          variant="warning"
+                          onClick={() => stopVM(vm.name)}
+                          title="Stop VM"
+                          className="p-2"
+                          disabled={vm.status !== 'running'}
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 10h6v6H9z" />
+                          </svg>
+                        </Button>
+                        <Button
+                          variant="danger"
+                          onClick={() => setDeleteConfirm(vm.name)}
+                          title="Delete VM"
+                          className="p-2"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -438,6 +531,49 @@ function VirtualMachine() {
             </div>
           </div>
         )}
+
+        {/* Edit VM Modal */}
+        <Modal
+          isOpen={!!editVM}
+          onClose={() => setEditVM(null)}
+          title="Edit Virtual Machine"
+        >
+          {editVM && (
+            <form onSubmit={handleEditSubmit} className="space-y-6">
+              <FormInput
+                label="VM Name"
+                value={editVM.name}
+                disabled
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormInput
+                  label="CPU Cores"
+                  type="number"
+                  value={editVM.cpu}
+                  onChange={(e) => setEditVM({...editVM, cpu: parseInt(e.target.value)})}
+                  min="1"
+                  required
+                />
+                <FormInput
+                  label="Memory (MB)"
+                  type="number"
+                  value={editVM.memory}
+                  onChange={(e) => setEditVM({...editVM, memory: parseInt(e.target.value)})}
+                  min="512"
+                  required
+                />
+              </div>
+              <div className="flex justify-end space-x-4">
+                <Button variant="secondary" onClick={() => setEditVM(null)}>
+                  Cancel
+                </Button>
+                <Button variant="primary" type="submit" disabled={isLoading}>
+                  Save Changes
+                </Button>
+              </div>
+            </form>
+          )}
+        </Modal>
       </div>
     </div>
   );
