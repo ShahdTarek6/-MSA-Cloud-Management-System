@@ -68,6 +68,13 @@ router.put('/edit/:name', (req, res) => {
       updated = true;
     }
   }
+
+  if (!updated) {
+    return res.status(400).json({ error: 'No valid fields to update' });
+  }
+
+  fs.writeFileSync(vmPath, JSON.stringify(vmData, null, 2));
+  res.json({ message: `✏️ VM "${name}" updated`, vm: vmData });
 });
 
 // Create VM
