@@ -5,6 +5,7 @@ import VirtualDisk from './Pages/Virtual_Disk';
 import VirtualMachine from './Pages/Virtual_Machine';
 import DockerContainers from './Pages/Docker_Containers';
 import DockerImages from './Pages/Docker_Images';
+import DockerFiles from './Pages/Docker_files';
 
 function App() {
   return (
@@ -20,7 +21,8 @@ function App() {
             <Route path="/virtual-disk" element={<VirtualDisk />} />
             <Route path="/virtual-machine" element={<VirtualMachine />} />
             <Route path="/docker-containers" element={<DockerContainers />} />
-            <Route path="/docker-images" element={<DockerImages />} />
+            <Route path="/docker-images" element={<DockerImages/>} />
+            <Route path="/docker-files" element={<DockerFiles />} />
           </Routes>
         </div>
       </div>
