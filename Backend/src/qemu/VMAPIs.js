@@ -16,6 +16,67 @@ const ISO_DIR = path.join(BACKEND_DIR, 'iso');
   }
 });
 
+//start
+router.post('/start/:name', (req, res) => {
+  const name = req.params.name;
+  const vmPath = path.join(VM_DIR, `${name}.json`);
+
+  if (!fs.existsSync(vmPath)) {
+    return res.status(404).json({ error: 'VM config not found' });
+  }
+
+  const { cpu, memory, diskName, format, iso } = JSON.parse(fs.readFileSync(vmPath));
+  const diskPath = path.join(DISK_DIR, `${diskName}.${format}`);
+  const args = ['-name', name, '-smp', cpu, '-m', memory, '-hda', diskPath];
+
+  if (iso) {
+    const isoPath = path.join(ISO_DIR, iso);
+    if (fs.existsSync(isoPath)) {
+      args.push('-cdrom', isoPath, '-boot', 'd');
+    }
+  }
+
+  const qemu = spawn('qemu-system-x86_64', args, {
+    detached: true,
+    stdio: 'ignore'
+  });
+
+  qemu.unref();
+
+  const updated = { ...JSON.parse(fs.readFileSync(vmPath)), pid: qemu.pid, startedAt: new Date().toISOString() };
+  fs.writeFileSync(vmPath, JSON.stringify(updated, null, 2));
+
+  res.json({ message: `🟢 VM "${name}" started`, pid: qemu.pid });
+});
+
+//update VM
+router.put('/edit/:name', (req, res) => {
+  const name = req.params.name;
+  const vmPath = path.join(VM_DIR, `${name}.json`);
+
+  if (!fs.existsSync(vmPath)) {
+    return res.status(404).json({ error: 'VM not found' });
+  }
+
+  const allowedFields = ['cpu', 'memory'];
+  const vmData = JSON.parse(fs.readFileSync(vmPath));
+  let updated = false;
+
+  for (const key of allowedFields) {
+    if (req.body[key]) {
+      vmData[key] = req.body[key];
+      updated = true;
+    }
+  }
+
+  if (!updated) {
+    return res.status(400).json({ error: 'No valid fields to update' });
+  }
+
+  fs.writeFileSync(vmPath, JSON.stringify(vmData, null, 2));
+  res.json({ message: `✏️ VM "${name}" updated`, vm: vmData });
+});
+
 // Create VM
 router.post('/create', (req, res) => {
   const { name, cpu, memory, diskName, format, iso } = req.body;
