@@ -264,25 +264,31 @@ router.post('/dockerfile', async (req, res) => {
 // List Dockerfiles endpoint
 router.get('/dockerfiles', async (req, res) => {
     try {
-        // Search for Dockerfiles in the workspace (recursive)
+        const basePath = req.query.basePath || process.env.HOME || process.env.USERPROFILE || process.cwd();
+
         const walk = (dir, filelist = []) => {
-            fs.readdirSync(dir).forEach(file => {
-                const filepath = path.join(dir, file);
-                if (fs.statSync(filepath).isDirectory()) {
-                    filelist = walk(filepath, filelist);
-                } else if (file.toLowerCase().includes('dockerfile')) {
+            fs.readdirSync(dir, { withFileTypes: true }).forEach(dirent => {
+                const filepath = path.join(dir, dirent.name);
+                if (dirent.isDirectory()) {
+                    try {
+                        filelist = walk(filepath, filelist);
+                    } catch (_) {}
+                } else if (dirent.isFile() && dirent.name.toLowerCase().includes('dockerfile')) {
                     filelist.push({ filePath: filepath });
                 }
             });
             return filelist;
         };
-        const root = process.cwd();
-        const dockerfiles = walk(root);
+
+        const dockerfiles = walk(basePath);
         res.json(dockerfiles);
     } catch (error) {
-        handleError(res, error);
+        console.error('Error listing Dockerfiles:', error);
+        res.status(500).json({ message: error.message || 'Failed to list Dockerfiles.' });
     }
 });
+
+
 
 // View Dockerfile content
 router.get('/dockerfile', async (req, res) => {
