@@ -191,30 +191,6 @@ router.post('/load', async (req, res) => {
     }
 });
 
-const express = require('express');
-const fs      = require('fs');
-const path    = require('path');
-
-
-const validateDockerfile = (content) => {
-    const errors = [];
-    const lines = content.split(/\r?\n/).map(l => l.trim());
-
-    if (!/^FROM\s+/i.test(lines[0] || '')) {
-        errors.push('Dockerfile must start with a valid FROM instruction.');
-    }
-    if (/rm\s+-rf\s+\//i.test(content)) {
-        errors.push("Dockerfile contains dangerous commands like 'rm -rf /'.");
-    }
-    if (content.length > 1024) {
-        errors.push('Dockerfile exceeds maximum allowed size (1KB).');
-    }
-    if (!/\b(CMD|ENTRYPOINT)\b/i.test(content)) {
-        errors.push('Warning: Dockerfile does not contain a CMD or ENTRYPOINT instruction.');
-    }
-    return errors;
-};
-
 router.post('/dockerfile', async (req, res) => {
     try {
         let { filePath, content } = req.body;

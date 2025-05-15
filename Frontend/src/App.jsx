@@ -16,8 +16,9 @@ function App() {
           <SideBar />
         </div>
 
-        {/* Content - 2/3 */}
-        <div className="w-5/6 bg-gray-100 overflow-y-auto p-6">          <Routes>
+        {/* Content - 2/3 */}        <div className="w-5/6 bg-gray-100 overflow-y-auto p-6">          
+          <Routes>
+            <Route path="/" element={<VirtualMachine />} />
             <Route path="/virtual-disk" element={<VirtualDisk />} />
             <Route path="/virtual-machine" element={<VirtualMachine />} />
             <Route path="/docker-containers" element={<DockerContainers />} />
