@@ -58,6 +58,16 @@ router.put('/edit/:name', (req, res) => {
     return res.status(404).json({ error: 'VM not found' });
   }
 
+  const allowedFields = ['cpu', 'memory'];
+  const vmData = JSON.parse(fs.readFileSync(vmPath));
+  let updated = false;
+
+  for (const key of allowedFields) {
+    if (req.body[key]) {
+      vmData[key] = req.body[key];
+      updated = true;
+    }
+  }
 });
 
 // Create VM
