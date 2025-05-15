@@ -24,6 +24,17 @@ router.post('/start/:name', (req, res) => {
   if (!fs.existsSync(vmPath)) {
     return res.status(404).json({ error: 'VM config not found' });
   }
+
+  const { cpu, memory, diskName, format, iso } = JSON.parse(fs.readFileSync(vmPath));
+  const diskPath = path.join(DISK_DIR, `${diskName}.${format}`);
+  const args = ['-name', name, '-smp', cpu, '-m', memory, '-hda', diskPath];
+
+  if (iso) {
+    const isoPath = path.join(ISO_DIR, iso);
+    if (fs.existsSync(isoPath)) {
+      args.push('-cdrom', isoPath, '-boot', 'd');
+    }
+  }
 });
 
 // Create VM
