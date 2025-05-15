@@ -16,6 +16,16 @@ const ISO_DIR = path.join(BACKEND_DIR, 'iso');
   }
 });
 
+//start
+router.post('/start/:name', (req, res) => {
+  const name = req.params.name;
+  const vmPath = path.join(VM_DIR, `${name}.json`);
+
+  if (!fs.existsSync(vmPath)) {
+    return res.status(404).json({ error: 'VM config not found' });
+  }
+});
+
 // Create VM
 router.post('/create', (req, res) => {
   const { name, cpu, memory, diskName, format, iso } = req.body;
