@@ -239,19 +239,28 @@ router.post('/dockerfile', async (req, res) => {
 // List Dockerfiles endpoint
 router.get('/dockerfiles', async (req, res) => {
     try {
-        const dockerfilesDir = path.join(__dirname, 'dockerfiles');
-        fs.mkdirSync(dockerfilesDir, { recursive: true });
-        
-        const dockerfiles = fs.readdirSync(dockerfilesDir)
-            .filter(file => file.toLowerCase().includes('dockerfile'))
-            .map(file => ({
-                filePath: path.join(dockerfilesDir, file)
-            }));
+        // Search for Dockerfiles in the workspace (recursive)
+        const walk = (dir, filelist = []) => {
+            fs.readdirSync(dir).forEach(file => {
+                const filepath = path.join(dir, file);
+                if (fs.statSync(filepath).isDirectory()) {
+                    filelist = walk(filepath, filelist);
+                } else if (file.toLowerCase().includes('dockerfile')) {
+                    filelist.push({ filePath: filepath });
+                }
+            });
+            return filelist;
+        };
+        const root = process.cwd();
+        const dockerfiles = walk(root);
         res.json(dockerfiles);
     } catch (error) {
-        handleError(res, error);
+        console.error('Error listing Dockerfiles:', error);
+        res.status(500).json({ message: error.message || 'Failed to list Dockerfiles.' });
     }
 });
+
+
 
 // View Dockerfile content
 router.get('/dockerfile', async (req, res) => {
