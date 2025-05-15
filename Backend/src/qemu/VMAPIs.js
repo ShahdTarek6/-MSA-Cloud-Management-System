@@ -49,6 +49,17 @@ router.post('/start/:name', (req, res) => {
   res.json({ message: `🟢 VM "${name}" started`, pid: qemu.pid });
 });
 
+//update VM
+router.put('/edit/:name', (req, res) => {
+  const name = req.params.name;
+  const vmPath = path.join(VM_DIR, `${name}.json`);
+
+  if (!fs.existsSync(vmPath)) {
+    return res.status(404).json({ error: 'VM not found' });
+  }
+
+});
+
 // Create VM
 router.post('/create', (req, res) => {
   const { name, cpu, memory, diskName, format, iso } = req.body;
