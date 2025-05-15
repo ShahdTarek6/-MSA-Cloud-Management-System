@@ -195,22 +195,21 @@ router.post('/dockerfile', async (req, res) => {
     try {
         let { filePath, content } = req.body;
 
-        if (!filePath || !content) {
-            return res.status(400).json({ message: 'filePath and content are required.' });
+        if (!content) {
+            return res.status(400).json({ message: 'content is required.' });
         }
 
-        let finalPath = path.isAbsolute(filePath)
-            ? filePath
-            : path.resolve(process.cwd(), filePath);
+        // Use the dockerfiles directory
+        const dockerfilesDir = path.join(__dirname, 'dockerfiles');
+        fs.mkdirSync(dockerfilesDir, { recursive: true });
 
-        const looksLikeDir =
-            finalPath.endsWith(path.sep) ||
-            !path.extname(finalPath) ||
-            path.basename(finalPath).toLowerCase() === '';
-
-        if (looksLikeDir || (fs.existsSync(finalPath) && fs.statSync(finalPath).isDirectory())) {
-            finalPath = path.join(finalPath, 'Dockerfile');
+        // If no filePath is provided, generate a unique name
+        if (!filePath) {
+            filePath = `Dockerfile_${Date.now()}`;
         }
+
+        // Ensure the file is created in the dockerfiles directory
+        const finalPath = path.join(dockerfilesDir, path.basename(filePath));
 
         const allErrors = validateDockerfile(content);
         const errors = allErrors.filter(e => !e.startsWith('Warning'));
@@ -240,20 +239,14 @@ router.post('/dockerfile', async (req, res) => {
 // List Dockerfiles endpoint
 router.get('/dockerfiles', async (req, res) => {
     try {
-        // Search for Dockerfiles in the workspace (recursive)
-        const walk = (dir, filelist = []) => {
-            fs.readdirSync(dir).forEach(file => {
-                const filepath = path.join(dir, file);
-                if (fs.statSync(filepath).isDirectory()) {
-                    filelist = walk(filepath, filelist);
-                } else if (file.toLowerCase().includes('dockerfile')) {
-                    filelist.push({ filePath: filepath });
-                }
-            });
-            return filelist;
-        };
-        const root = process.cwd();
-        const dockerfiles = walk(root);
+        const dockerfilesDir = path.join(__dirname, 'dockerfiles');
+        fs.mkdirSync(dockerfilesDir, { recursive: true });
+        
+        const dockerfiles = fs.readdirSync(dockerfilesDir)
+            .filter(file => file.toLowerCase().includes('dockerfile'))
+            .map(file => ({
+                filePath: path.join(dockerfilesDir, file)
+            }));
         res.json(dockerfiles);
     } catch (error) {
         handleError(res, error);
@@ -265,8 +258,12 @@ router.get('/dockerfile', async (req, res) => {
     try {
         const { filePath } = req.query;
         if (!filePath) return res.status(400).json({ message: 'filePath is required.' });
-        if (!fs.existsSync(filePath)) return res.status(404).json({ message: 'Dockerfile not found.' });
-        const content = fs.readFileSync(filePath, 'utf-8');
+        
+        const dockerfilesDir = path.join(__dirname, 'dockerfiles');
+        const fullPath = path.join(dockerfilesDir, path.basename(filePath));
+        
+        if (!fs.existsSync(fullPath)) return res.status(404).json({ message: 'Dockerfile not found.' });
+        const content = fs.readFileSync(fullPath, 'utf-8');
         res.json({ content });
     } catch (error) {
         handleError(res, error);
@@ -280,11 +277,15 @@ router.put('/dockerfile', async (req, res) => {
         if (!filePath || !content) {
             return res.status(400).json({ message: 'filePath and content are required.' });
         }
+        
+        const dockerfilesDir = path.join(__dirname, 'dockerfiles');
+        const fullPath = path.join(dockerfilesDir, path.basename(filePath));
+        
         const errors = validateDockerfile(content);
         if (errors.some(e => !e.startsWith('Warning'))) {
             return res.status(400).json({ errors });
         }
-        fs.writeFileSync(filePath, content);
+        fs.writeFileSync(fullPath, content);
         res.json({ message: 'Dockerfile updated successfully.', warnings: errors.filter(e => e.startsWith('Warning')) });
     } catch (error) {
         handleError(res, error);
@@ -296,8 +297,12 @@ router.delete('/dockerfile', async (req, res) => {
     try {
         const { filePath } = req.query;
         if (!filePath) return res.status(400).json({ message: 'filePath is required.' });
-        if (!fs.existsSync(filePath)) return res.status(404).json({ message: 'Dockerfile not found.' });
-        fs.unlinkSync(filePath);
+        
+        const dockerfilesDir = path.join(__dirname, 'dockerfiles');
+        const fullPath = path.join(dockerfilesDir, path.basename(filePath));
+        
+        if (!fs.existsSync(fullPath)) return res.status(404).json({ message: 'Dockerfile not found.' });
+        fs.unlinkSync(fullPath);
         res.json({ message: 'Dockerfile deleted successfully.' });
     } catch (error) {
         handleError(res, error);
