@@ -38,6 +38,17 @@ const Docker_Images = () => {
         fetchImages();
     }, [fetchImages]);
 
+    if (isLoading) {
+        return (
+            <div className="container mx-auto p-4">
+                <h1 className="text-2xl font-bold mb-6">Docker Images</h1>
+                <div className="flex justify-center items-center h-64">
+                    <div className="text-gray-600">Loading images...</div>
+                </div>
+            </div>
+        );
+    }
+
     const handlePullImage = async (e) => {
         e.preventDefault();
         try {

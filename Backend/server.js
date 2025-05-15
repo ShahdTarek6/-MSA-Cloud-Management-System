@@ -23,6 +23,10 @@ app.use((req, res, next) => {
   next();
 });
 
+// Mount API routes
+app.use('/api/docker', dockerAPIs);
+app.use('/api/qemu', qemuAPIs);
+
 // Simple endpoint logging
 app.use((req, res, next) => {
   if (!req.path.includes('favicon')) { // Ignore favicon requests
@@ -30,10 +34,6 @@ app.use((req, res, next) => {
   }
   next();
 });
-
-// Mount route modules
-app.use('/api/docker', dockerAPIs);
-app.use('/api/qemu', qemuAPIs);
 
 // Start server
 app.listen(PORT, () => {
