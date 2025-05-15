@@ -35,6 +35,18 @@ router.post('/start/:name', (req, res) => {
       args.push('-cdrom', isoPath, '-boot', 'd');
     }
   }
+
+  const qemu = spawn('qemu-system-x86_64', args, {
+    detached: true,
+    stdio: 'ignore'
+  });
+
+  qemu.unref();
+
+  const updated = { ...JSON.parse(fs.readFileSync(vmPath)), pid: qemu.pid, startedAt: new Date().toISOString() };
+  fs.writeFileSync(vmPath, JSON.stringify(updated, null, 2));
+
+  res.json({ message: `🟢 VM "${name}" started`, pid: qemu.pid });
 });
 
 // Create VM
