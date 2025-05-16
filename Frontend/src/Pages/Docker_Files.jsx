@@ -131,7 +131,7 @@ CMD ["nginx", "-g", "daemon off;"]`
             const data = await response.json();
             setDockerfiles(Array.isArray(data)
                 ? data.map(f => ({
-                    filePath: f.filePath || f.path || '',
+                    filePath: f.absolutePath || f.filePath || '',
                     name: f.name || f.filePath?.split('/').pop().split('\\').pop() || '',
                     content: f.content || ''
                 }))
@@ -146,12 +146,17 @@ CMD ["nginx", "-g", "daemon off;"]`
 
     useEffect(() => {
         fetchDockerfiles();
-    }, [fetchDockerfiles]);    const handleDockerfilePathChange= (e) => {
+    }, [fetchDockerfiles]);
+
+    const handleDockerfilePathChange = (e) => {
         let value = e.target.value;
+        // Only handle basic path separators
         value = value.replace(/\\/g, '/');
         if (!useCustomPath && value.length > 1 && value.endsWith('/')) {
             value = value.slice(0, -1);
         }
+        // Remove any automatically added .dockerfile extensions
+        value = value.replace(/\.dockerfile.*$/, '');
         setDockerfilePath(value);
     };
 
@@ -160,27 +165,23 @@ CMD ["nginx", "-g", "daemon off;"]`
         setDockerfileContent(template.content);
     };
 
-    const handleCopyToClipboard = async (content) => {
-        try {
-            await navigator.clipboard.writeText(content);
-            showNotification('Content copied to clipboard!', 'success');
-        } catch (error) {
-            showNotification('Failed to copy content', 'error');
-            console.error('Copy error:', error);
-        }
-    };
-
     const handleCreateDockerfile = async (e) => {
         e?.preventDefault(); // Make it work both with form submit and button click
         setBackendErrors([]);
         setBackendWarnings([]);
         try {
             setIsLoading(true);
+            // Add .dockerfile extension here only when submitting
+            let finalPath = dockerfilePath;
+            if (!useCustomPath && !finalPath.toLowerCase().endsWith('.dockerfile') && finalPath.toLowerCase() !== 'dockerfile') {
+                finalPath = `${finalPath}.dockerfile`;
+            }
+            
             const response = await fetch(`${API_URL}/docker/dockerfile`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                    filePath: dockerfilePath || `Dockerfile_${Date.now()}`,
+                    filePath: finalPath,
                     content: dockerfileContent,
                     useCustomPath
                 })
@@ -280,7 +281,11 @@ CMD ["nginx", "-g", "daemon off;"]`
 
     const handleBuildClick = (dockerfile) => {
         setSelectedBuildFile(dockerfile);
-        setImageTag(`${dockerfile.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}:latest`);
+        // Generate a default image tag based on the dockerfile name
+        const baseName = dockerfile.name.toLowerCase()
+            .replace(/\.dockerfile$/, '')  // Remove .dockerfile extension
+            .replace(/[^a-z0-9-]/g, '-');  // Replace invalid chars with dash
+        setImageTag(`${baseName}:latest`);
         setBuildOutput([]);
         setIsBuildModalOpen(true);
     };
@@ -292,6 +297,11 @@ CMD ["nginx", "-g", "daemon off;"]`
         try {
             setIsBuildLoading(true);
             setBuildOutput([]);
+            
+            // Add a first line to show the equivalent docker command
+            setBuildOutput([
+                `🔵 Executing: docker build -f ${selectedBuildFile.name} -t ${imageTag} .`
+            ]);
 
             const response = await fetch(`${API_URL}/docker/images/build-image`, {
                 method: 'POST',
@@ -301,6 +311,11 @@ CMD ["nginx", "-g", "daemon off;"]`
                     imageTag: imageTag
                 })
             });
+
+            if (!response.ok && response.status !== 200) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to build image');
+            }
 
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
@@ -314,15 +329,24 @@ CMD ["nginx", "-g", "daemon off;"]`
                     if (!line.trim()) continue;
                     try {
                         const data = JSON.parse(line);
-                        setBuildOutput(prev => [...prev, data.stream || data.error || '']);
-                    } catch (err) {
-                        console.warn('Could not parse build output line:', line);
+                        if (data.error) {
+                            setBuildOutput(prev => [...prev, `❌ Error: ${data.error}`]);
+                            throw new Error(data.error);
+                        }
+                        if (data.stream) {
+                            setBuildOutput(prev => [...prev, data.stream.trim()]);
+                        }
+                    } catch (error) {
+                        if (error.message !== 'Unexpected end of JSON input') {
+                            console.warn('Build output parse error:', error);
+                        }
                     }
                 }
             }
 
-            showNotification('Image build completed');
+            showNotification('Image build completed successfully', 'success');
         } catch (error) {
+            setBuildOutput(prev => [...prev, `❌ Build failed: ${error.message}`]);
             showNotification(error.message, 'error');
         } finally {
             setIsBuildLoading(false);
@@ -331,13 +355,20 @@ CMD ["nginx", "-g", "daemon off;"]`
 
     const renderBuildOutput = () => {
         return buildOutput.map((line, index) => (
-            <div key={index} className={`text-sm font-mono whitespace-pre-wrap ${
-                line.includes('error') || line.includes('Error') 
-                    ? 'text-red-600' 
-                    : line.includes('Step') 
-                        ? 'text-blue-600 font-semibold'
-                        : 'text-gray-700'
-            }`}>
+            <div 
+                key={index} 
+                className={`text-sm font-mono whitespace-pre-wrap ${
+                    line.startsWith('❌') 
+                        ? 'text-red-600' 
+                        : line.startsWith('🔵')
+                            ? 'text-blue-600 font-bold'
+                            : line.includes('Step')
+                                ? 'text-blue-600 font-semibold'
+                                : line.includes('Successfully built')
+                                    ? 'text-green-600 font-semibold'
+                                    : 'text-gray-700'
+                }`}
+            >
                 {line}
             </div>
         ));
@@ -345,42 +376,6 @@ CMD ["nginx", "-g", "daemon off;"]`
 
     const filteredDockerfiles = dockerfiles.filter(file => 
         file.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    const renderPathInput = () => (
-        <div className="space-y-4">
-            <div className="flex items-center space-x-2">
-                <input
-                    type="checkbox"
-                    id="useCustomPath"
-                    checked={useCustomPath}
-                    onChange={(e) => {
-                        setUseCustomPath(e.target.checked);
-                        setDockerfilePath(''); // Clear path when switching modes
-                    }}
-                    className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-                />
-                <label htmlFor="useCustomPath" className="text-sm text-gray-700">
-                    Use custom directory path
-                </label>
-            </div>
-            <FormInput
-                label={useCustomPath ? "Full Directory Path" : "Dockerfile Name"}
-                value={dockerfilePath}
-                onChange={handleDockerfilePathChange}
-                placeholder={useCustomPath 
-                    ? "e.g. /path/to/your/project/Dockerfile" 
-                    : "e.g. Dockerfile.dev"}
-                required
-                error={validatePath(dockerfilePath)}
-            />
-            {useCustomPath && (
-                <p className="text-sm text-gray-500">
-                    Provide an absolute path where you want to create the Dockerfile. 
-                    For example: "/home/user/project/Dockerfile" or "C:/Projects/MyApp/Dockerfile"
-                </p>
-            )}
-        </div>
     );
 
     return (
@@ -475,7 +470,45 @@ CMD ["nginx", "-g", "daemon off;"]`
                 size="lg"
             >
                 <div className="space-y-4">
-                    {renderPathInput()}
+                    <div className="space-y-4">
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="checkbox"
+                                id="useCustomPath"
+                                checked={useCustomPath}
+                                onChange={(e) => {
+                                    setUseCustomPath(e.target.checked);
+                                    setDockerfilePath(''); // Clear path when switching modes
+                                }}
+                                className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                            />
+                            <label htmlFor="useCustomPath" className="text-sm text-gray-700">
+                                Use custom directory path
+                            </label>
+                        </div>
+                        <FormInput
+                            label={useCustomPath ? "Full Directory Path" : "Dockerfile Name"}
+                            value={dockerfilePath}
+                            onChange={handleDockerfilePathChange}
+                            placeholder={useCustomPath 
+                                ? "e.g. /path/to/your/project/service.dockerfile" 
+                                : "e.g. myservice (will add .dockerfile automatically)"}
+                            required
+                            error={validatePath(dockerfilePath)}
+                        />
+                        {useCustomPath && (
+                            <p className="text-sm text-gray-500">
+                                Provide an absolute path where you want to create the Dockerfile. 
+                                For example: "/home/user/project/service.dockerfile" or "C:/Projects/MyApp/service.dockerfile"
+                            </p>
+                        )}
+                        {!useCustomPath && (
+                            <p className="text-sm text-gray-500">
+                                Enter the name without extension - '.dockerfile' will be added automatically. 
+                                Or use 'Dockerfile' for the default name.
+                            </p>
+                        )}
+                    </div>
 
                     <div className="mb-4">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -616,9 +649,18 @@ CMD ["nginx", "-g", "daemon off;"]`
                 <div className="space-y-4">
                     {selectedBuildFile && (
                         <div>
-                            <p className="text-sm text-gray-600 mb-4">
-                                Building image from: <span className="font-mono font-semibold">{selectedBuildFile.name}</span>
-                            </p>
+                            <div className="mb-4">
+                                <h3 className="text-sm font-medium text-gray-700 mb-1">Building from:</h3>
+                                <div className="bg-gray-50 p-2 rounded font-mono text-sm">
+                                    {selectedBuildFile.name}
+                                </div>
+                            </div>
+                            <div className="mb-4">
+                                <h3 className="text-sm font-medium text-gray-700 mb-1">Command to execute:</h3>
+                                <div className="bg-gray-50 p-2 rounded font-mono text-sm">
+                                    docker build -f {selectedBuildFile.name} -t {imageTag || '[tag]'} .
+                                </div>
+                            </div>
                             <FormInput
                                 label="Image Tag"
                                 value={imageTag}
@@ -635,10 +677,19 @@ CMD ["nginx", "-g", "daemon off;"]`
                         <div className="bg-gray-50 rounded-lg p-4 h-96 overflow-auto">
                             {buildOutput.length === 0 ? (
                                 <div className="text-gray-500 text-center py-4">
-                                    {isBuildLoading ? 'Building...' : 'Build output will appear here'}
+                                    {isBuildLoading ? (
+                                        <div className="flex flex-col items-center">
+                                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-2"></div>
+                                            Building image...
+                                        </div>
+                                    ) : (
+                                        'Build output will appear here'
+                                    )}
                                 </div>
                             ) : (
-                                renderBuildOutput()
+                                <div className="space-y-1">
+                                    {renderBuildOutput()}
+                                </div>
                             )}
                         </div>
                     </div>

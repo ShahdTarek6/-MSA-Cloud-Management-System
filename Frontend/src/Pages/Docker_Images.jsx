@@ -3,7 +3,14 @@ import { Button } from '../component/Button';
 import { FormInput } from '../component/FormInput';
 import { Modal } from '../component/Modal';
 import { Notification } from '../component/Notification';
-import { FiUpload, FiDownload, FiTrash2, FiSearch, FiTag, FiBox } from 'react-icons/fi';
+import { FiUpload, FiDownload, FiTrash2, FiSearch, FiTag, FiBox, FiCopy } from 'react-icons/fi';
+
+// Helper function to get filename from path
+const getFilename = (filepath) => {
+    if (!filepath) return '';
+    const parts = filepath.split(/[\\/]/);
+    return parts[parts.length - 1];
+};
 
 const API_URL = 'http://localhost:3000/api';
 
@@ -21,6 +28,7 @@ const Docker_Images = () => {
     const [imageTag, setImageTag] = useState('');
     const [buildOutput, setBuildOutput] = useState([]);
     const [isBuildLoading, setIsBuildLoading] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const [pullForm, setPullForm] = useState({
         fromImage: '',
@@ -50,7 +58,8 @@ const Docker_Images = () => {
             setDockerfiles(Array.isArray(data)
                 ? data.map(f => ({
                     filePath: f.filePath || f.path || '',
-                    name: f.name || f.filePath?.split('/').pop().split('\\').pop() || ''
+                    name: getFilename(f.filePath || f.path || ''),
+                    content: f.content || ''
                 }))
                 : []);
         } catch (error) {
@@ -134,6 +143,7 @@ const Docker_Images = () => {
         setBuildOutput([]);
         try {
             let dockerfilePath = selectedDockerfile;
+            
             // If uploading a file, first upload it to the backend
             if (uploadedDockerfile) {
                 const formData = new FormData();
@@ -141,12 +151,22 @@ const Docker_Images = () => {
                 // Save as a temp Dockerfile in backend dockerfiles dir
                 const uploadRes = await fetch(`${API_URL}/docker/dockerfile`, {
                     method: 'POST',
-                    body: formData
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        content: await uploadedDockerfile.text(),
+                        filePath: getFilename(uploadedDockerfile.name)
+                    })
                 });
                 const uploadData = await uploadRes.json();
                 if (!uploadRes.ok) throw new Error(uploadData.message || 'Failed to upload Dockerfile');
-                dockerfilePath = uploadData.path || uploadData.filePath || uploadData.name;
+                dockerfilePath = uploadData.filePath;
             }
+
+            // Add first line to show the build command
+            setBuildOutput([
+                `🔵 Executing: docker build -f ${getFilename(dockerfilePath)} -t ${imageTag} .`
+            ]);
+            
             const response = await fetch(`${API_URL}/docker/images/build-image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -155,25 +175,43 @@ const Docker_Images = () => {
                     imageTag: imageTag
                 })
             });
+
+            if (!response.ok && response.status !== 200) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to build image');
+            }
+
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
+
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
+
                 const lines = decoder.decode(value).split('\n');
                 for (const line of lines) {
                     if (!line.trim()) continue;
                     try {
                         const data = JSON.parse(line);
-                        setBuildOutput(prev => [...prev, data.stream || data.error || data.message || '']);
-                    } catch (_) {
-                        // ignore
+                        if (data.error) {
+                            setBuildOutput(prev => [...prev, `❌ Error: ${data.error}`]);
+                            throw new Error(data.error);
+                        }
+                        if (data.stream) {
+                            setBuildOutput(prev => [...prev, data.stream.trim()]);
+                        }
+                    } catch (error) {
+                        if (error.message !== 'Unexpected end of JSON input') {
+                            console.warn('Build output parse error:', error);
+                        }
                     }
                 }
             }
-            showNotification('Image build completed');
+
+            showNotification('Image build completed successfully', 'success');
             fetchImages();
         } catch (error) {
+            setBuildOutput(prev => [...prev, `❌ Build failed: ${error.message}`]);
             showNotification(error.message, 'error');
         } finally {
             setIsBuildLoading(false);
@@ -209,41 +247,111 @@ const Docker_Images = () => {
             )}
 
             <div className="mb-6">
-                <FormInput
-                    label="Search Docker Hub"
-                    placeholder="Search for images..."
-                    onChange={(e) => handleSearch(e.target.value)}
-                    icon={<FiSearch className="text-gray-400" />}
-                />
+                <div className="relative">
+                    <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Search Docker Hub (e.g., node, python, nginx)..."
+                        className="pl-10 pr-4 py-2 w-full border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={searchTerm}
+                        onChange={(e) => {
+                            setSearchTerm(e.target.value);
+                            handleSearch(e.target.value);
+                        }}
+                    />
+                </div>
                 {isSearching && (
-                    <div className="mt-2 flex justify-center">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                    <div className="mt-4 flex justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
                     </div>
                 )}
                 {searchResults.length > 0 && (
-                    <div className="mt-2 bg-white rounded-lg shadow-md p-4">
-                        <h3 className="font-bold mb-2">Search Results</h3>
-                        <div className="space-y-2">
+                    <div className="mt-4 bg-white rounded-lg shadow-lg overflow-hidden">
+                        <div className="border-b border-gray-200 bg-gray-50 px-4 py-3">
+                            <h3 className="text-lg font-semibold text-gray-700">
+                                Docker Hub Search Results
+                            </h3>
+                            <p className="text-sm text-gray-500">
+                                Click "Pull" to download the image or click the name for more details
+                            </p>
+                        </div>
+                        <div className="divide-y divide-gray-200">
                             {searchResults.map(result => (
-                                <div key={result.name} className="flex justify-between items-center p-2 hover:bg-gray-50 rounded">
-                                    <div>
-                                        <p className="font-semibold">{result.name}</p>
-                                        <p className="text-sm text-gray-600">{result.description}</p>
-                                        <p className="text-xs text-gray-500">
-                                            ⭐ {result.star_count} | Official: {result.is_official ? 'Yes' : 'No'}
-                                        </p>
+                                <div key={result.name} 
+                                    className="p-4 hover:bg-gray-50 transition-colors duration-150"
+                                >
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="text-lg font-medium text-blue-600 hover:text-blue-800">
+                                                    <a 
+                                                        href={`https://hub.docker.com/_/${result.name}`} 
+                                                        target="_blank" 
+                                                        rel="noopener noreferrer"
+                                                        className="hover:underline"
+                                                    >
+                                                        {result.name}
+                                                    </a>
+                                                </h4>
+                                                {result.is_official && (
+                                                    <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                                                        Official
+                                                    </span>
+                                                )}
+                                                <span className="flex items-center text-yellow-500 text-sm">
+                                                    ⭐ {result.star_count.toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <p className="mt-1 text-sm text-gray-600">
+                                                {result.description || 'No description available'}
+                                            </p>
+                                            <div className="mt-2 flex flex-wrap gap-2">
+                                                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                                                    Downloads: {result.pull_count?.toLocaleString() || 'N/A'}
+                                                </span>
+                                                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                                                    Updated: {new Date(result.updated_at).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="ml-4 flex items-center gap-2">
+                                            <Button
+                                                onClick={() => {
+                                                    setPullForm({ fromImage: result.name, tag: 'latest' });
+                                                    setIsPullModalOpen(true);
+                                                }}
+                                                className="bg-blue-500 hover:bg-blue-600 text-white flex items-center gap-2 px-4"
+                                            >
+                                                <FiDownload /> Pull
+                                            </Button>
+                                            <div className="relative group">
+                                                <button
+                                                    className="p-2 hover:bg-gray-100 rounded-full"
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(`docker pull ${result.name}`);
+                                                        showNotification('Docker pull command copied to clipboard', 'success');
+                                                    }}
+                                                >
+                                                    <FiCopy className="text-gray-500" />
+                                                </button>
+                                                <div className="absolute right-0 top-full mt-2 w-48 bg-gray-800 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    Copy docker pull command
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <Button
-                                        onClick={() => {
-                                            setPullForm({ fromImage: result.name, tag: 'latest' });
-                                            setIsPullModalOpen(true);
-                                        }}
-                                        className="bg-blue-500 text-white flex items-center gap-1"
-                                    >
-                                        <FiDownload /> Pull
-                                    </Button>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                )}
+                {searchTerm && !isSearching && searchResults.length === 0 && (
+                    <div className="mt-4 text-center p-8 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="text-gray-500">
+                            No images found matching "{searchTerm}"
+                        </div>
+                        <div className="text-sm text-gray-400 mt-2">
+                            Try adjusting your search term or check the spelling
                         </div>
                     </div>
                 )}
@@ -320,10 +428,10 @@ const Docker_Images = () => {
             <Modal
                 isOpen={isBuildModalOpen}
                 onClose={() => setIsBuildModalOpen(false)}
-                title="Build Docker Image from Dockerfile"
+                title="Build Docker Image"
                 size="lg"
             >
-                <form onSubmit={handleBuildImage} className="space-y-4">
+                <div className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium mb-1">Select or Upload Dockerfile</label>
                         <div className="flex gap-2">
@@ -331,14 +439,27 @@ const Docker_Images = () => {
                                 className="w-full border rounded px-2 py-2"
                                 value={selectedDockerfile}
                                 onChange={e => {
-                                    setSelectedDockerfile(e.target.value);
+                                    const selected = e.target.value;
+                                    setSelectedDockerfile(selected);
                                     setUploadedDockerfile(null);
+                                    // Set a default image tag based on the selected Dockerfile
+                                    if (selected) {
+                                        const dockerfile = dockerfiles.find(df => df.filePath === selected);
+                                        if (dockerfile) {
+                                            const baseName = dockerfile.name.toLowerCase()
+                                                .replace(/\.dockerfile$/, '')
+                                                .replace(/[^a-z0-9-]/g, '-');
+                                            setImageTag(`${baseName}:latest`);
+                                        }
+                                    }
                                 }}
                                 disabled={isBuildLoading}
                             >
                                 <option value="">-- Select Dockerfile --</option>
                                 {dockerfiles.map(df => (
-                                    <option key={df.filePath} value={df.filePath}>{df.name}</option>
+                                    <option key={df.filePath} value={df.filePath}>
+                                        {getFilename(df.name)}
+                                    </option>
                                 ))}
                             </select>
                             <input
@@ -349,6 +470,12 @@ const Docker_Images = () => {
                                     if (e.target.files && e.target.files[0]) {
                                         setUploadedDockerfile(e.target.files[0]);
                                         setSelectedDockerfile('');
+                                        // Set a default image tag based on the uploaded file
+                                        const fileName = e.target.files[0].name;
+                                        const baseName = fileName.toLowerCase()
+                                            .replace(/\.dockerfile$/, '')
+                                            .replace(/[^a-z0-9-]/g, '-');
+                                        setImageTag(`${baseName}:latest`);
                                     }
                                 }}
                                 disabled={isBuildLoading}
@@ -358,44 +485,93 @@ const Docker_Images = () => {
                             <div className="text-xs text-green-700 mt-1">Selected file: {uploadedDockerfile.name}</div>
                         )}
                     </div>
-                    <FormInput
-                        label="Image Tag"
-                        value={imageTag}
-                        onChange={e => setImageTag(e.target.value)}
-                        placeholder="e.g. myapp:latest"
-                        required
-                        disabled={isBuildLoading}
-                    />
+
+                    {(selectedDockerfile || uploadedDockerfile) && (
+                        <>
+                            <div className="mb-4">
+                                <h3 className="text-sm font-medium text-gray-700 mb-1">Command Preview:</h3>
+                                <div className="bg-gray-50 p-2 rounded font-mono text-sm">
+                                    docker build -f {selectedDockerfile ? getFilename(selectedDockerfile) : uploadedDockerfile?.name || '[dockerfile]'} -t {imageTag || '[tag]'} .
+                                </div>
+                            </div>
+
+                            <FormInput
+                                label="Image Tag"
+                                value={imageTag}
+                                onChange={e => setImageTag(e.target.value)}
+                                placeholder="e.g. myapp:latest"
+                                required
+                                disabled={isBuildLoading}
+                            />
+                        </>
+                    )}
+
                     <div>
                         <label className="block text-sm font-medium mb-1">Build Output</label>
-                        <div className="bg-gray-100 rounded p-2 h-48 overflow-auto text-xs font-mono">
+                        <div className="bg-gray-50 rounded p-4 h-96 overflow-auto font-mono">
                             {buildOutput.length === 0 ? (
-                                <span className="text-gray-400">Build output will appear here...</span>
+                                <div className="text-gray-500 text-center py-4">
+                                    {isBuildLoading ? (
+                                        <div className="flex flex-col items-center">
+                                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-2"></div>
+                                            Building image...
+                                        </div>
+                                    ) : (
+                                        'Build output will appear here...'
+                                    )}
+                                </div>
                             ) : (
-                                buildOutput.map((line, i) => (
-                                    <div key={i} className={line.toLowerCase().includes('error') ? 'text-red-600' : 'text-gray-800'}>{line}</div>
-                                ))
+                                <div className="space-y-1">
+                                    {buildOutput.map((line, i) => (
+                                        <div 
+                                            key={i} 
+                                            className={`text-sm whitespace-pre-wrap ${
+                                                line.startsWith('❌') 
+                                                    ? 'text-red-600' 
+                                                    : line.startsWith('🔵')
+                                                        ? 'text-blue-600 font-bold'
+                                                        : line.includes('Step')
+                                                            ? 'text-blue-600 font-semibold'
+                                                            : line.includes('Successfully built')
+                                                                ? 'text-green-600 font-semibold'
+                                                                : 'text-gray-700'
+                                            }`}
+                                        >
+                                            {line}
+                                        </div>
+                                    ))}
+                                </div>
                             )}
                         </div>
                     </div>
+
                     <div className="flex justify-end gap-2">
                         <Button
                             type="button"
                             onClick={() => setIsBuildModalOpen(false)}
-                            className="bg-gray-500 text-white"
+                            className="bg-gray-500 hover:bg-gray-600 text-white"
                             disabled={isBuildLoading}
                         >
                             Cancel
                         </Button>
                         <Button
-                            type="submit"
-                            className="bg-purple-600 text-white flex items-center gap-2"
+                            onClick={handleBuildImage}
+                            className="bg-purple-600 hover:bg-purple-700 text-white flex items-center gap-2"
                             disabled={isBuildLoading || (!selectedDockerfile && !uploadedDockerfile) || !imageTag}
                         >
-                            {isBuildLoading ? 'Building...' : (<><FiBox /> Build Image</>)}
+                            {isBuildLoading ? (
+                                <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white" />
+                                    Building...
+                                </>
+                            ) : (
+                                <>
+                                    <FiBox /> Build Image
+                                </>
+                            )}
                         </Button>
                     </div>
-                </form>
+                </div>
             </Modal>
         </div>
     );

@@ -46,38 +46,32 @@ function validateDockerfile(content) {
 // List all Dockerfiles
 router.get('/', async (req, res) => {
     try {
-        // Get Dockerfiles from both default directory and custom paths
-        const findDockerfiles = async (dir) => {
-            const dockerfiles = [];
-            const files = await fs.promises.readdir(dir, { withFileTypes: true });
-            
-            for (const file of files) {
-                const fullPath = path.join(dir, file.name);
-                if (file.isDirectory()) {
-                    const subDirFiles = await findDockerfiles(fullPath);
-                    dockerfiles.push(...subDirFiles);
-                } else if (file.name.toLowerCase().includes('dockerfile')) {
-                    try {
-                        const content = await fs.promises.readFile(fullPath, 'utf-8');
-                        dockerfiles.push({
-                            name: file.name,
-                            filePath: path.relative(defaultDockerfilesDir, fullPath),
-                            absolutePath: fullPath,
-                            content,
-                            isCustomPath: !fullPath.startsWith(defaultDockerfilesDir)
-                        });
-                    } catch (err) {
-                        console.warn(`Error reading file ${fullPath}:`, err);
-                    }
+        // Get Dockerfiles from the default directory
+        const dockerfiles = [];
+        const files = await fs.promises.readdir(defaultDockerfilesDir, { withFileTypes: true });
+        
+        for (const file of files) {
+            const fullPath = path.join(defaultDockerfilesDir, file.name);
+            // Check for both Dockerfile and .dockerfile extension
+            if (file.isFile() && (file.name.toLowerCase().endsWith('.dockerfile') || file.name.toLowerCase() === 'dockerfile')) {
+                try {
+                    const content = await fs.promises.readFile(fullPath, 'utf-8');
+                    dockerfiles.push({
+                        name: file.name,
+                        filePath: fullPath,
+                        absolutePath: fullPath,
+                        content
+                    });
+                } catch (err) {
+                    console.warn(`Error reading file ${fullPath}:`, err);
                 }
             }
-            return dockerfiles;
-        };
-
-        const dockerfiles = await findDockerfiles(defaultDockerfilesDir);
+        }
+        
         res.json(dockerfiles.filter(Boolean));
     } catch (error) {
-        handleError(res, error);
+        console.error('Error listing Dockerfiles:', error);
+        res.status(500).json({ message: error.message || 'Failed to list Dockerfiles.' });
     }
 });
 
@@ -105,7 +99,10 @@ router.post('/', async (req, res) => {
         }
 
         if (!filePath) {
-            filePath = `Dockerfile_${Date.now()}`;
+            filePath = `Dockerfile_${Date.now()}.dockerfile`;
+        } else if (!filePath.toLowerCase().endsWith('.dockerfile') && filePath.toLowerCase() !== 'dockerfile') {
+            // Append .dockerfile extension if not present
+            filePath = `${filePath}.dockerfile`;
         }
 
         let finalPath;

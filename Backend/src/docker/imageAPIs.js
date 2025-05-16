@@ -420,19 +420,49 @@ router.post('/build-image', async (req, res) => {
             return res.status(400).json({ message: 'dockerfilePath and imageTag are required.' });
         }
 
+        // Ensure the path exists
+        let resolvedDockerfilePath = dockerfilePath;
         if (!fs.existsSync(dockerfilePath)) {
-            return res.status(404).json({ message: `Path not found: ${dockerfilePath}` });
+            // Try looking in the dockerfiles directory
+            const dockerfilesDir = path.join(__dirname, 'dockerfiles');
+            const altPath = path.join(dockerfilesDir, path.basename(dockerfilePath));
+            
+            if (!fs.existsSync(altPath)) {
+                return res.status(404).json({ message: `Dockerfile not found at: ${dockerfilePath} or ${altPath}` });
+            }
+            
+            // Use the alternative path if found
+            resolvedDockerfilePath = altPath;
         }
 
-        const isFile = fs.statSync(dockerfilePath).isFile();
-        const contextPath = isFile ? path.dirname(dockerfilePath) : dockerfilePath;
-        const dockerfileName = isFile ? path.basename(dockerfilePath) : 'Dockerfile';
+        // Set build context to Frontend directory where package.json exists
+        const frontendDir = path.join(process.cwd(), '..', 'Frontend');
+        const contextPath = frontendDir;
+        
+        // Create a temporary directory for the build context
+        const tempDir = path.join(process.cwd(), 'temp_build_context');
+        fs.mkdirSync(tempDir, { recursive: true });
+        
+        // Copy the Dockerfile to the temp directory
+        const dockerfileInContext = path.join(tempDir, path.basename(resolvedDockerfilePath));
+        fs.copyFileSync(resolvedDockerfilePath, dockerfileInContext);
+        
+        // Copy package.json and package-lock.json if they exist
+        const packageJsonPath = path.join(frontendDir, 'package.json');
+        const packageLockPath = path.join(frontendDir, 'package-lock.json');
+        
+        if (fs.existsSync(packageJsonPath)) {
+            fs.copyFileSync(packageJsonPath, path.join(tempDir, 'package.json'));
+        }
+        if (fs.existsSync(packageLockPath)) {
+            fs.copyFileSync(packageLockPath, path.join(tempDir, 'package-lock.json'));
+        }
 
         // Create tar stream from the build context
-        const tarStream = tar.pack(contextPath, {
-            entries: ['Dockerfile', '.'], // Include Dockerfile and all context
+        const tarStream = tar.pack(tempDir, {
+            entries: ['.'], // Include all files from the context
             map: function(header) {
-                header.name = header.name.replace(`${contextPath}/`, '');
+                header.name = header.name.replace(`${tempDir}/`, '');
                 return header;
             }
         });
@@ -440,7 +470,7 @@ router.post('/build-image', async (req, res) => {
         // Prepare build options
         const buildOpts = {
             t: imageTag,
-            dockerfile: dockerfileName,
+            dockerfile: path.basename(resolvedDockerfilePath),
             nocache: req.query.nocache === 'true',
             pull: req.query.pull === 'true',
             rm: true
@@ -461,6 +491,13 @@ router.post('/build-image', async (req, res) => {
         docker.modem.followProgress(stream, 
             // Final callback when build is done
             (err, outputs) => {
+                // Clean up - remove the temp directory
+                try {
+                    fs.rmSync(tempDir, { recursive: true, force: true });
+                } catch (cleanupErr) {
+                    console.warn('Failed to clean up temporary build context:', cleanupErr);
+                }
+
                 if (err) {
                     console.error('Docker build failed:', err);
                     res.end(JSON.stringify({ 
@@ -472,11 +509,12 @@ router.post('/build-image', async (req, res) => {
                 } else {
                     res.end(JSON.stringify({ 
                         success: true,
-                        message: `✅ Image '${imageTag}' built successfully.`,
+                        message: `✅ Image '${imageTag}' built successfully using ${path.basename(resolvedDockerfilePath)}`,
                         output: buildOutput
                     }));
                 }
-            },            // Progress callback
+            },
+            // Progress callback
             (event) => {
                 if (event.stream) {
                     buildOutput.push(event.stream.trim());
