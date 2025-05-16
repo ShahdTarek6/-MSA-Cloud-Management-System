@@ -2,13 +2,15 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '../component/Button';
 import { FormInput } from '../component/FormInput';
 import { Modal } from '../component/Modal';
-import { Select } from '../component/Select';
 import { Notification } from '../component/Notification';
+import { FiPlay, FiSquare, FiPause, FiTrash2, FiPlus, FiFileText } from 'react-icons/fi';
+import RefreshButton from '../component/RefreshButton';
 
 const API_URL = 'http://localhost:3000/api';
 
 const Docker_Containers = () => {
     const [containers, setContainers] = useState([]);
+    const [images, setImages] = useState([]);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [notification, setNotification] = useState(null);
@@ -39,11 +41,27 @@ const Docker_Containers = () => {
         }
     }, [showNotification]);
 
+    const fetchImages = useCallback(async () => {
+        try {
+            const response = await fetch(`${API_URL}/docker/images`);
+            const data = await response.json();
+            setImages(data);
+        } catch (error) {
+            showNotification('Error fetching images: ' + error.message, 'error');
+        }
+    }, [showNotification]);
+
     useEffect(() => {
         fetchContainers();
-        const interval = setInterval(fetchContainers, 5000);
+        fetchImages();
+        const interval = setInterval(() => {
+            fetchContainers();
+            fetchImages();
+        }, 5000);
         return () => clearInterval(interval);
-    }, [fetchContainers]);const handleContainerAction = async (id, action) => {
+    }, [fetchContainers, fetchImages]);
+
+    const handleContainerAction = async (id, action) => {
         try {
             setIsLoading(true);
             const response = await fetch(`${API_URL}/docker/containers/${id}/${action}`, {
@@ -57,7 +75,9 @@ const Docker_Containers = () => {
         } finally {
             setIsLoading(false);
         }
-    };    const handleCreateContainer = async (e) => {
+    };
+
+    const handleCreateContainer = async (e) => {
         e.preventDefault();
         try {
             setIsLoading(true);
@@ -69,13 +89,23 @@ const Docker_Containers = () => {
             if (!response.ok) throw new Error('Failed to create container');
             showNotification('Container created successfully');
             setIsCreateModalOpen(false);
+            setCreateForm({
+                Image: '',
+                name: '',
+                ExposedPorts: {},
+                HostConfig: {
+                    PortBindings: {}
+                }
+            });
             fetchContainers();
         } catch (error) {
             showNotification(error.message, 'error');
         } finally {
             setIsLoading(false);
         }
-    };    const handleDeleteContainer = async (id) => {
+    };
+
+    const handleDeleteContainer = async (id) => {
         if (!window.confirm('Are you sure you want to delete this container?')) return;
         try {
             setIsLoading(true);
@@ -90,7 +120,9 @@ const Docker_Containers = () => {
         } finally {
             setIsLoading(false);
         }
-    };    const fetchContainerLogs = async (id) => {
+    };
+
+    const fetchContainerLogs = async (id) => {
         try {
             const response = await fetch(`${API_URL}/docker/containers/${id}/logs?stdout=true&stderr=true`);
             const text = await response.text();
@@ -104,12 +136,15 @@ const Docker_Containers = () => {
     return (
         <div className="container mx-auto p-4">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-bold">Docker Containers</h1>
+                <div className="flex items-center gap-2">
+                    <h1 className="text-2xl font-bold">Docker Containers</h1>
+                    <RefreshButton onRefresh={fetchContainers} />
+                </div>
                 <Button
                     onClick={() => setIsCreateModalOpen(true)}
-                    className="bg-blue-500 text-white"
+                    className="bg-green-500 text-white flex items-center gap-2"
                 >
-                    Create Container
+                    <FiPlus /> Create Container
                 </Button>
             </div>
 
@@ -128,64 +163,105 @@ const Docker_Containers = () => {
                             {container.Names[0].replace('/', '')}
                         </h3>
                         <p className="text-sm mb-2">Image: {container.Image}</p>
-                        <p className="text-sm mb-2">Status: {container.Status}</p>
+                        <p className="text-sm mb-2">
+                            Status: <span className={`font-medium ${
+                                container.State === 'running' ? 'text-green-600' :
+                                container.State === 'paused' ? 'text-yellow-600' :
+                                'text-red-600'
+                            }`}>{container.State}</span>
+                        </p>
                         <div className="flex flex-wrap gap-2 mt-4">
-                            {container.State !== 'running' && (
+                            {/* Show Start button only when container is stopped/exited */}
+                            {['created', 'exited', 'dead'].includes(container.State) && (
                                 <Button
                                     onClick={() => handleContainerAction(container.Id, 'start')}
-                                    className="bg-green-500 text-white"
+                                    className="flex-1 bg-green-500 text-white flex items-center justify-center gap-1"
                                 >
-                                    Start
+                                    <FiPlay /> Start
                                 </Button>
                             )}
+
+                            {/* Show Stop and Pause buttons only when container is running */}
                             {container.State === 'running' && (
                                 <>
                                     <Button
                                         onClick={() => handleContainerAction(container.Id, 'stop')}
-                                        className="bg-yellow-500 text-white"
+                                        className="flex-1 bg-yellow-500 text-white flex items-center justify-center gap-1"
                                     >
-                                        Stop
+                                        <FiSquare /> Stop
                                     </Button>
                                     <Button
-                                        onClick={() => handleContainerAction(container.Id, 'restart')}
-                                        className="bg-blue-500 text-white"
+                                        onClick={() => handleContainerAction(container.Id, 'pause')}
+                                        className="flex-1 bg-blue-500 text-white flex items-center justify-center gap-1"
                                     >
-                                        Restart
+                                        <FiPause /> Pause
                                     </Button>
                                 </>
                             )}
+
+                            {/* Show Unpause button only when container is paused */}
+                            {container.State === 'paused' && (
+                                <Button
+                                    onClick={() => handleContainerAction(container.Id, 'unpause')}
+                                    className="flex-1 bg-blue-500 text-white flex items-center justify-center gap-1"
+                                >
+                                    <FiPlay /> Unpause
+                                </Button>
+                            )}
+
                             <Button
                                 onClick={() => fetchContainerLogs(container.Id)}
-                                className="bg-purple-500 text-white"
+                                className="flex-1 bg-purple-500 text-white flex items-center justify-center gap-1"
                             >
-                                Logs
+                                <FiFileText /> Logs
                             </Button>
+
+                            {/* Always show Delete button, but with different styling based on state */}
                             <Button
                                 onClick={() => handleDeleteContainer(container.Id)}
-                                className="bg-red-500 text-white"
+                                className={`flex-1 ${
+                                    container.State === 'running' 
+                                        ? 'bg-red-400 hover:bg-red-500' 
+                                        : 'bg-red-500 hover:bg-red-600'
+                                } text-white flex items-center justify-center gap-1`}
                             >
-                                Delete
+                                <FiTrash2 /> Delete
                             </Button>
                         </div>
                     </div>
                 ))}
             </div>
 
+            {/* Create Container Modal */}
             <Modal
                 isOpen={isCreateModalOpen}
                 onClose={() => setIsCreateModalOpen(false)}
                 title="Create Container"
             >
                 <form onSubmit={handleCreateContainer} className="space-y-4">
-                    <FormInput
-                        label="Image Name"
-                        value={createForm.Image}
-                        onChange={(e) => setCreateForm({
-                            ...createForm,
-                            Image: e.target.value
-                        })}
-                        required
-                    />
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Image Name*
+                        </label>
+                        <select
+                            value={createForm.Image}
+                            onChange={(e) => setCreateForm({
+                                ...createForm,
+                                Image: e.target.value
+                            })}
+                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            required
+                        >
+                            <option value="">Select an image</option>
+                            {images.map(image => (
+                                image.RepoTags?.map(tag => (
+                                    <option key={tag} value={tag}>
+                                        {tag}
+                                    </option>
+                                ))
+                            ))}
+                        </select>
+                    </div>
                     <FormInput
                         label="Container Name"
                         value={createForm.name}
@@ -193,25 +269,37 @@ const Docker_Containers = () => {
                             ...createForm,
                             name: e.target.value
                         })}
+                        placeholder="e.g., my-container"
                         required
                     />
                     <Button
                         type="submit"
-                        className="bg-blue-500 text-white w-full"
+                        className="w-full bg-green-500 hover:bg-green-600 text-white flex items-center justify-center gap-2"
                         disabled={isLoading}
                     >
-                        {isLoading ? 'Creating...' : 'Create Container'}
+                        {isLoading ? (
+                            <>
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                Creating...
+                            </>
+                        ) : (
+                            <>
+                                <FiPlus /> Create Container
+                            </>
+                        )}
                     </Button>
                 </form>
             </Modal>
 
+            {/* Logs Modal */}
             <Modal
                 isOpen={showLogs}
                 onClose={() => setShowLogs(false)}
                 title="Container Logs"
+                size="lg"
             >
-                <pre className="whitespace-pre-wrap bg-gray-100 p-4 rounded">
-                    {logs}
+                <pre className="whitespace-pre-wrap bg-gray-100 p-4 rounded max-h-96 overflow-auto font-mono text-sm">
+                    {logs || 'No logs available'}
                 </pre>
             </Modal>
         </div>
