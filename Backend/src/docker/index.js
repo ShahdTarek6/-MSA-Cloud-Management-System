@@ -16,9 +16,11 @@ exports.docker = docker;
 // Import Docker routes
 const containerAPIs = require('./containerAPIs');
 const imageAPIs = require('./imageAPIs');
+const dockerfileAPIs = require('./dockerfileAPIs');
 
 // Mount Docker routes
 router.use('/containers', containerAPIs);
 router.use('/images', imageAPIs);
+router.use('/dockerfile', dockerfileAPIs);
 
 module.exports = router;
