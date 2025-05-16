@@ -1,4 +1,7 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const tar = require('tar-fs');
 const { docker } = require('./index');
 const router = express.Router();
 
@@ -421,9 +424,6 @@ router.delete('/dockerfile', async (req, res) => {
         handleError(res, error);
     }
 });
-
-
-const tar = require('tar-fs');
 
 // POST /build-image
 router.post('/build-image', async (req, res) => {
