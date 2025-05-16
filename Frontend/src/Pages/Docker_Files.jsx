@@ -5,7 +5,7 @@ import { Modal } from '../component/Modal';
 import { Notification } from '../component/Notification';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
-import { FiFile, FiTrash2, FiEdit2, FiPlus, FiSearch, FiCopy } from 'react-icons/fi';
+import { FiFile, FiTrash2, FiEdit2, FiPlus, FiSearch, FiCopy, FiBox } from 'react-icons/fi';
 
 const API_URL = 'http://localhost:3000/api';
 
@@ -28,6 +28,12 @@ const DockerFilesManager = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedTemplate, setSelectedTemplate] = useState(null);
     const [useCustomPath, setUseCustomPath] = useState(false);
+
+    const [isBuildModalOpen, setIsBuildModalOpen] = useState(false);
+    const [selectedBuildFile, setSelectedBuildFile] = useState(null);
+    const [imageTag, setImageTag] = useState('');
+    const [buildOutput, setBuildOutput] = useState([]);
+    const [isBuildLoading, setIsBuildLoading] = useState(false);
 
     const templates = [
         {
@@ -272,6 +278,71 @@ CMD ["nginx", "-g", "daemon off;"]`
         }
     };
 
+    const handleBuildClick = (dockerfile) => {
+        setSelectedBuildFile(dockerfile);
+        setImageTag(`${dockerfile.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}:latest`);
+        setBuildOutput([]);
+        setIsBuildModalOpen(true);
+    };
+
+    const handleBuildImage = async (e) => {
+        e.preventDefault();
+        if (!selectedBuildFile || !imageTag) return;
+
+        try {
+            setIsBuildLoading(true);
+            setBuildOutput([]);
+
+            const response = await fetch(`${API_URL}/docker/images/build-image`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dockerfilePath: selectedBuildFile.filePath,
+                    imageTag: imageTag
+                })
+            });
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const lines = decoder.decode(value).split('\n');
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const data = JSON.parse(line);
+                        setBuildOutput(prev => [...prev, data.stream || data.error || '']);
+                    } catch (err) {
+                        console.warn('Could not parse build output line:', line);
+                    }
+                }
+            }
+
+            showNotification('Image build completed');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsBuildLoading(false);
+        }
+    };
+
+    const renderBuildOutput = () => {
+        return buildOutput.map((line, index) => (
+            <div key={index} className={`text-sm font-mono whitespace-pre-wrap ${
+                line.includes('error') || line.includes('Error') 
+                    ? 'text-red-600' 
+                    : line.includes('Step') 
+                        ? 'text-blue-600 font-semibold'
+                        : 'text-gray-700'
+            }`}>
+                {line}
+            </div>
+        ));
+    };
+
     const filteredDockerfiles = dockerfiles.filter(file => 
         file.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -378,10 +449,10 @@ CMD ["nginx", "-g", "daemon off;"]`
                                         <FiEdit2 /> Edit
                                     </Button>
                                     <Button
-                                        onClick={() => handleCopyToClipboard(dockerfile.content)}
-                                        className="flex-1 bg-gray-500 hover:bg-gray-600 text-white flex items-center justify-center gap-1"
+                                        onClick={() => handleBuildClick(dockerfile)}
+                                        className="flex-1 bg-green-500 hover:bg-green-600 text-white flex items-center justify-center gap-1"
                                     >
-                                        <FiCopy /> Copy
+                                        <FiBox /> Build
                                     </Button>
                                     <Button
                                         onClick={() => handleDelete(dockerfile.filePath)}
@@ -524,11 +595,77 @@ CMD ["nginx", "-g", "daemon off;"]`
                         >
                             Cancel
                         </Button>
-                        <Button                            onClick={handleEditSave}
+                        <Button
+                            onClick={handleEditSave}
                             className="bg-blue-500 hover:bg-blue-600 text-white"
                             disabled={isLoading}
                         >
                             {isLoading ? 'Saving...' : 'Save Changes'}
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Build Image Modal */}
+            <Modal
+                isOpen={isBuildModalOpen}
+                onClose={() => setIsBuildModalOpen(false)}
+                title="Build Docker Image"
+                size="lg"
+            >
+                <div className="space-y-4">
+                    {selectedBuildFile && (
+                        <div>
+                            <p className="text-sm text-gray-600 mb-4">
+                                Building image from: <span className="font-mono font-semibold">{selectedBuildFile.name}</span>
+                            </p>
+                            <FormInput
+                                label="Image Tag"
+                                value={imageTag}
+                                onChange={(e) => setImageTag(e.target.value)}
+                                placeholder="e.g., myapp:latest"
+                                required
+                                disabled={isBuildLoading}
+                            />
+                        </div>
+                    )}
+
+                    <div className="mt-4">
+                        <h3 className="text-sm font-medium text-gray-700 mb-2">Build Output</h3>
+                        <div className="bg-gray-50 rounded-lg p-4 h-96 overflow-auto">
+                            {buildOutput.length === 0 ? (
+                                <div className="text-gray-500 text-center py-4">
+                                    {isBuildLoading ? 'Building...' : 'Build output will appear here'}
+                                </div>
+                            ) : (
+                                renderBuildOutput()
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 mt-4">
+                        <Button
+                            onClick={() => setIsBuildModalOpen(false)}
+                            className="bg-gray-500 hover:bg-gray-600 text-white"
+                            disabled={isBuildLoading}
+                        >
+                            Close
+                        </Button>
+                        <Button
+                            onClick={handleBuildImage}
+                            className="bg-green-500 hover:bg-green-600 text-white flex items-center gap-2"
+                            disabled={isBuildLoading || !selectedBuildFile || !imageTag}
+                        >
+                            {isBuildLoading ? (
+                                <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white" />
+                                    Building...
+                                </>
+                            ) : (
+                                <>
+                                    <FiBox /> Build Image
+                                </>
+                            )}
                         </Button>
                     </div>
                 </div>

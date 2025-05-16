@@ -428,7 +428,7 @@ router.delete('/dockerfile', async (req, res) => {
 // POST /build-image
 router.post('/build-image', async (req, res) => {
     try {
-        const { dockerfilePath, imageTag } = req.body;
+        const { dockerfilePath, imageTag, buildArgs } = req.body;
 
         if (!dockerfilePath || !imageTag) {
             return res.status(400).json({ message: 'dockerfilePath and imageTag are required.' });
@@ -442,21 +442,65 @@ router.post('/build-image', async (req, res) => {
         const contextPath = isFile ? path.dirname(dockerfilePath) : dockerfilePath;
         const dockerfileName = isFile ? path.basename(dockerfilePath) : 'Dockerfile';
 
-        const tarStream = tar.pack(contextPath);
-
-        const stream = await docker.buildImage(tarStream, {
-            t: imageTag,
-            dockerfile: dockerfileName
-        });
-
-        docker.modem.followProgress(stream, (err, output) => {
-            if (err) {
-                console.error('Docker build failed:', err);
-                return res.status(500).json({ message: err.message || 'Build failed.' });
+        // Create tar stream from the build context
+        const tarStream = tar.pack(contextPath, {
+            entries: ['Dockerfile', '.'], // Include Dockerfile and all context
+            map: function(header) {
+                header.name = header.name.replace(`${contextPath}/`, '');
+                return header;
             }
-            res.status(201).json({ message: `✅ Image '${imageTag}' built successfully.` });
         });
 
+        // Prepare build options
+        const buildOpts = {
+            t: imageTag,
+            dockerfile: dockerfileName,
+            nocache: req.query.nocache === 'true',
+            pull: req.query.pull === 'true',
+            rm: true
+        };
+
+        // Add build arguments if provided
+        if (buildArgs && Object.keys(buildArgs).length > 0) {
+            buildOpts.buildargs = buildArgs;
+        }
+
+        const stream = await docker.buildImage(tarStream, buildOpts);
+
+        // Stream the build output
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Transfer-Encoding', 'chunked');
+
+        let buildOutput = [];
+        docker.modem.followProgress(stream, 
+            // Final callback when build is done
+            (err, outputs) => {
+                if (err) {
+                    console.error('Docker build failed:', err);
+                    res.end(JSON.stringify({ 
+                        success: false, 
+                        message: err.message || 'Build failed.',
+                        error: err,
+                        output: buildOutput 
+                    }));
+                } else {
+                    res.end(JSON.stringify({ 
+                        success: true,
+                        message: `✅ Image '${imageTag}' built successfully.`,
+                        output: buildOutput
+                    }));
+                }
+            },            // Progress callback
+            (event) => {
+                if (event.stream) {
+                    buildOutput.push(event.stream.trim());
+                    res.write(JSON.stringify({ stream: event.stream }) + '\n');
+                } else if (event.error) {
+                    buildOutput.push(event.error);
+                    res.write(JSON.stringify({ error: event.error }) + '\n');
+                }
+            }
+        );
     } catch (error) {
         console.error('Build error:', error);
         res.status(500).json({ message: error.message || 'Internal server error.' });
