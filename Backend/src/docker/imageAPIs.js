@@ -327,37 +327,46 @@ router.delete('/dockerfile', async (req, res) => {
 });
 
 
+const tar = require('tar-fs');
 
 // POST /build-image
 router.post('/build-image', async (req, res) => {
     try {
         const { dockerfilePath, imageTag } = req.body;
+
         if (!dockerfilePath || !imageTag) {
             return res.status(400).json({ message: 'dockerfilePath and imageTag are required.' });
         }
 
-        const contextPath = fs.statSync(dockerfilePath).isFile()
-            ? path.dirname(dockerfilePath)
-            : dockerfilePath;
+        if (!fs.existsSync(dockerfilePath)) {
+            return res.status(404).json({ message: `Path not found: ${dockerfilePath}` });
+        }
+
+        const isFile = fs.statSync(dockerfilePath).isFile();
+        const contextPath = isFile ? path.dirname(dockerfilePath) : dockerfilePath;
+        const dockerfileName = isFile ? path.basename(dockerfilePath) : 'Dockerfile';
 
         const tarStream = tar.pack(contextPath);
 
         const stream = await docker.buildImage(tarStream, {
             t: imageTag,
-            dockerfile: path.basename(dockerfilePath)
+            dockerfile: dockerfileName
         });
 
         docker.modem.followProgress(stream, (err, output) => {
             if (err) {
-                return handleError(res, err);
+                console.error('Docker build failed:', err);
+                return res.status(500).json({ message: err.message || 'Build failed.' });
             }
-            res.status(201).json({ message: `Image '${imageTag}' built successfully.` });
+            res.status(201).json({ message: `✅ Image '${imageTag}' built successfully.` });
         });
 
     } catch (error) {
-        handleError(res, error);
+        console.error('Build error:', error);
+        res.status(500).json({ message: error.message || 'Internal server error.' });
     }
 });
 
-// 
+
+ 
 module.exports = router;
