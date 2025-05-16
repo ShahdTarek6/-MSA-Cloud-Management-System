@@ -305,15 +305,23 @@ router.put('/dockerfile', async (req, res) => {
 router.delete('/dockerfile', async (req, res) => {
     try {
         const { filePath } = req.query;
-        if (!filePath) return res.status(400).json({ message: 'filePath is required.' });
+        if (!filePath) {
+            return res.status(400).json({ message: 'filePath is required.' });
+        }
         
         const dockerfilesDir = path.join(__dirname, 'dockerfiles');
-        const fullPath = path.join(dockerfilesDir, path.basename(filePath));
+        // Ensure we only use the filename part, not the full path
+        const filename = path.basename(filePath);
+        const fullPath = path.join(dockerfilesDir, filename);
         
-        if (!fs.existsSync(fullPath)) return res.status(404).json({ message: 'Dockerfile not found.' });
+        if (!fs.existsSync(fullPath)) {
+            return res.status(404).json({ message: `Dockerfile "${filename}" not found.` });
+        }
+        
         fs.unlinkSync(fullPath);
-        res.json({ message: 'Dockerfile deleted successfully.' });
+        res.json({ message: `Dockerfile "${filename}" deleted successfully.` });
     } catch (error) {
+        console.error('Error deleting Dockerfile:', error);
         handleError(res, error);
     }
 });

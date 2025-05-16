@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from '../component/Button';
 import { FormInput } from '../component/FormInput';
 import { Modal } from '../component/Modal';
@@ -149,10 +149,86 @@ const DockerFilesManager = () => {
         } finally {
             setIsLoading(false);
         }
+    };    const handleDelete = async (filePath) => {
+        if (!window.confirm('Are you sure you want to delete this Dockerfile?')) {
+            return;
+        }
+        try {
+            setIsLoading(true);
+            // Get just the filename from the path
+            const filename = filePath.split('/').pop().split('\\').pop();
+            const response = await fetch(`${API_URL}/docker/images/dockerfile?filePath=${encodeURIComponent(filename)}`, {
+                method: 'DELETE'
+            });
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.message || 'Failed to delete Dockerfile');
+            }
+            showNotification('Dockerfile deleted successfully');
+            await fetchDockerfiles(); // Refresh the list
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleEditClick = async (filePath) => {
+        try {
+            setIsLoading(true);
+            const response = await fetch(`${API_URL}/docker/images/dockerfile?filePath=${encodeURIComponent(filePath)}`);
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.message || 'Failed to fetch Dockerfile content');
+            }
+            const data = await response.json();
+            setSelectedDockerfile(filePath);
+            setEditDockerfileContent(data.content);
+            setIsEditModalOpen(true);
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleEditSave = async () => {
+        try {
+            setIsLoading(true);
+            const response = await fetch(`${API_URL}/docker/images/dockerfile`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filePath: selectedDockerfile,
+                    content: editDockerfileContent
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                setBackendErrors(data.errors || [data.message]);
+                throw new Error(data.message || 'Failed to update Dockerfile');
+            }
+            setBackendWarnings(data.warnings || []);
+            showNotification('Dockerfile updated successfully');
+            setIsEditModalOpen(false);
+            await fetchDockerfiles(); // Refresh the list
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
         <div className="container mx-auto p-4">
+            {notification && (
+                <Notification
+                    message={notification.message}
+                    type={notification.type}
+                    show={true}
+                />
+            )}
+
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold">Dockerfiles</h1>
                 <div className="flex items-center gap-2">
@@ -162,38 +238,55 @@ const DockerFilesManager = () => {
                 </div>
             </div>
 
-            {notification && (
-                <Notification message={notification.message} type={notification.type} onClose={() => setNotification(null)} />
-            )}
-
-            <div className="mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {isDockerfilesLoading ? (
-                    <p className="text-center text-gray-500">Loading Dockerfiles...</p>
+                    <p className="text-center text-gray-500 col-span-3">Loading Dockerfiles...</p>
                 ) : dockerfiles.length === 0 ? (
-                    <p className="text-center text-gray-500">No Dockerfiles found.</p>
-                ) : (
-                    <div className="grid gap-4">
-                        {dockerfiles.map(file => (
-                            <div key={file.filePath} className="bg-white p-4 rounded shadow">
-                                <div className="flex justify-between items-center">
-                                    <p className="font-mono text-sm break-all">{file.filePath}</p>
-                                    <div className="flex space-x-2">
-                                        <Button onClick={() => handleEditDockerfile(file)} className="bg-yellow-500 text-white">Edit</Button>
-                                        <Button onClick={() => handleDeleteDockerfile(file.filePath)} className="bg-red-500 text-white">Delete</Button>
-                                    </div>
-                                </div>
+                    <p className="text-center text-gray-500 col-span-3">No Dockerfiles found.</p>
+                ) : (                    dockerfiles.map((dockerfile, index) => (
+                        <div key={index} className="bg-white p-4 rounded-lg shadow-md">
+                            <h3 className="font-bold mb-2">
+                                {dockerfile.filePath.split('/').pop().split('\\').pop()}
+                            </h3>
+                            <div className="flex flex-wrap gap-2 mt-4">
+                                <Button
+                                    onClick={() => handleEditClick(dockerfile.filePath)}
+                                    className="bg-blue-500 text-white"
+                                >
+                                    Edit
+                                </Button>
+                                <Button
+                                    onClick={() => handleDelete(dockerfile.filePath)}
+                                    className="bg-red-500 text-white"
+                                >
+                                    Delete
+                                </Button>
                             </div>
-                        ))}
-                    </div>
+                        </div>
+                    ))
                 )}
             </div>
 
+            {/* Create Dockerfile Modal */}
             <Modal isOpen={isDockerfileModalOpen} onClose={() => setIsDockerfileModalOpen(false)} title="Create Dockerfile">
                 <form onSubmit={handleCreateDockerfile} className="space-y-4">
-                    <FormInput value={dockerfilePath} onChange={handleDockerfilePathChange} placeholder="e.g. myproject/Dockerfile or C:/Users/Me/Desktop/Dockerfile" required />
-                    <div className="flex gap-2">
+                    <FormInput
+                        label="Dockerfile Path"
+                        value={dockerfilePath}
+                        onChange={handleDockerfilePathChange}
+                        placeholder="e.g. myproject/Dockerfile"
+                        required
+                    />
+                    <div className="flex gap-2 mb-2">
                         {templates.map(t => (
-                            <Button key={t.label} type="button" onClick={() => handleInsertTemplate(t.content)} className="bg-gray-200 text-xs">{t.label}</Button>
+                            <Button
+                                key={t.label}
+                                type="button"
+                                onClick={() => handleInsertTemplate(t.content)}
+                                className="bg-gray-200 text-xs"
+                            >
+                                {t.label}
+                            </Button>
                         ))}
                     </div>
                     <textarea
@@ -203,24 +296,62 @@ const DockerFilesManager = () => {
                         className="w-full border rounded p-2 font-mono"
                         required
                     />
-                    {backendErrors.length > 0 && backendErrors.map((e, i) => <p key={i} className="text-red-500 text-sm">❌ {e}</p>)}
-                    {backendWarnings.length > 0 && backendWarnings.map((w, i) => <p key={i} className="text-yellow-500 text-sm">⚠️ {w}</p>)}
-                    <Button type="submit" disabled={isLoading} className="bg-green-600 text-white w-full">
-                        {isLoading ? 'Creating...' : 'Create'}
+                    {backendErrors.length > 0 && (
+                        <div className="text-red-500 text-sm">
+                            {backendErrors.map((error, i) => (
+                                <p key={i}>❌ {error}</p>
+                            ))}
+                        </div>
+                    )}
+                    {backendWarnings.length > 0 && (
+                        <div className="text-yellow-500 text-sm">
+                            {backendWarnings.map((warning, i) => (
+                                <p key={i}>⚠️ {warning}</p>
+                            ))}
+                        </div>
+                    )}
+                    <Button
+                        type="submit"
+                        className="w-full bg-blue-500 text-white"
+                        disabled={isLoading}
+                    >
+                        {isLoading ? 'Creating...' : 'Create Dockerfile'}
                     </Button>
                 </form>
             </Modal>
 
-            <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title={`Edit: ${selectedDockerfile?.filePath || ''}`}>
-                <textarea
-                    value={editDockerfileContent}
-                    onChange={e => setEditDockerfileContent(e.target.value)}
-                    rows={10}
-                    className="w-full border rounded p-2 font-mono mb-4"
-                />
-                <Button onClick={handleSaveEditDockerfile} disabled={isLoading} className="bg-green-600 text-white w-full">
-                    {isLoading ? 'Saving...' : 'Save'}
-                </Button>
+            {/* Edit Dockerfile Modal */}
+            <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Dockerfile">
+                <div className="space-y-4">
+                    <textarea
+                        value={editDockerfileContent}
+                        onChange={(e) => setEditDockerfileContent(e.target.value)}
+                        rows={10}
+                        className="w-full border rounded p-2 font-mono"
+                        required
+                    />
+                    {backendErrors.length > 0 && (
+                        <div className="text-red-500 text-sm">
+                            {backendErrors.map((error, i) => (
+                                <p key={i}>❌ {error}</p>
+                            ))}
+                        </div>
+                    )}
+                    {backendWarnings.length > 0 && (
+                        <div className="text-yellow-500 text-sm">
+                            {backendWarnings.map((warning, i) => (
+                                <p key={i}>⚠️ {warning}</p>
+                            ))}
+                        </div>
+                    )}
+                    <Button
+                        onClick={handleEditSave}
+                        className="w-full bg-blue-500 text-white"
+                        disabled={isLoading}
+                    >
+                        {isLoading ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                </div>
             </Modal>
         </div>
     );
