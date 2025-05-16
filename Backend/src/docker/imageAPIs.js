@@ -318,4 +318,38 @@ router.delete('/dockerfile', async (req, res) => {
     }
 });
 
+
+
+// POST /build-image
+router.post('/build-image', async (req, res) => {
+    try {
+        const { dockerfilePath, imageTag } = req.body;
+        if (!dockerfilePath || !imageTag) {
+            return res.status(400).json({ message: 'dockerfilePath and imageTag are required.' });
+        }
+
+        const contextPath = fs.statSync(dockerfilePath).isFile()
+            ? path.dirname(dockerfilePath)
+            : dockerfilePath;
+
+        const tarStream = tar.pack(contextPath);
+
+        const stream = await docker.buildImage(tarStream, {
+            t: imageTag,
+            dockerfile: path.basename(dockerfilePath)
+        });
+
+        docker.modem.followProgress(stream, (err, output) => {
+            if (err) {
+                return handleError(res, err);
+            }
+            res.status(201).json({ message: `Image '${imageTag}' built successfully.` });
+        });
+
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
+// 
 module.exports = router;
