@@ -290,50 +290,38 @@ router.post('/load', async (req, res) => {
     }
 });
 
-router.post('/dockerfile', async (req, res) => {
+router.post('/dockerfile', express.json(), async (req, res) => {
     try {
+        if (!req.body) {
+            return res.status(400).json({ message: 'Request body is required and must be JSON.' });
+        }
         let { filePath, content } = req.body;
-
         if (!content) {
             return res.status(400).json({ message: 'content is required.' });
         }
-
-        // Use the dockerfiles directory
         const dockerfilesDir = path.join(__dirname, 'dockerfiles');
         fs.mkdirSync(dockerfilesDir, { recursive: true });
-
-        // If no filePath is provided, generate a unique name
         if (!filePath) {
             filePath = `Dockerfile_${Date.now()}`;
         }
-
-        // Ensure the file is created in the dockerfiles directory
         const finalPath = path.join(dockerfilesDir, path.basename(filePath));
-
         const allErrors = validateDockerfile(content);
         const errors = allErrors.filter(e => !e.startsWith('Warning'));
         const warnings = allErrors.filter(e => e.startsWith('Warning'));
-
         if (errors.length) {
             return res.status(400).json({ errors });
         }
-
         fs.mkdirSync(path.dirname(finalPath), { recursive: true });
         fs.writeFileSync(finalPath, content);
-
         return res.json({
             message: `Dockerfile written to ${finalPath}`,
-            warnings
+            warnings: warnings
         });
-
     } catch (err) {
         console.error('Error writing Dockerfile:', err);
         return res.status(500).json({ message: err.message || 'Internal server error.' });
     }
 });
-
-
-
 
 // List Dockerfiles endpoint
 router.get('/dockerfiles', async (req, res) => {
@@ -358,8 +346,6 @@ router.get('/dockerfiles', async (req, res) => {
         res.status(500).json({ message: error.message || 'Failed to list Dockerfiles.' });
     }
 });
-
-
 
 // View Dockerfile content
 router.get('/dockerfile', async (req, res) => {

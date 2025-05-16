@@ -3,20 +3,24 @@ import { Button } from '../component/Button';
 import { FormInput } from '../component/FormInput';
 import { Modal } from '../component/Modal';
 import { Notification } from '../component/Notification';
-import { FiUpload, FiDownload, FiTrash2, FiSearch, FiTag } from 'react-icons/fi';
+import { FiUpload, FiDownload, FiTrash2, FiSearch, FiTag, FiBox } from 'react-icons/fi';
 
 const API_URL = 'http://localhost:3000/api';
 
 const Docker_Images = () => {
     const [images, setImages] = useState([]);
     const [isPullModalOpen, setIsPullModalOpen] = useState(false);
-    const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+    const [isBuildModalOpen, setIsBuildModalOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
-    const [isUploading, setIsUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState(0);
     const [notification, setNotification] = useState(null);
     const [searchResults, setSearchResults] = useState([]);
     const [isSearching, setIsSearching] = useState(false);
+    const [dockerfiles, setDockerfiles] = useState([]);
+    const [selectedDockerfile, setSelectedDockerfile] = useState('');
+    const [uploadedDockerfile, setUploadedDockerfile] = useState(null);
+    const [imageTag, setImageTag] = useState('');
+    const [buildOutput, setBuildOutput] = useState([]);
+    const [isBuildLoading, setIsBuildLoading] = useState(false);
 
     const [pullForm, setPullForm] = useState({
         fromImage: '',
@@ -35,6 +39,23 @@ const Docker_Images = () => {
             setImages(data);
         } catch (error) {
             showNotification('Error fetching images: ' + error.message, 'error');
+        }
+    }, [showNotification]);
+
+    const fetchDockerfiles = useCallback(async () => {
+        try {
+            const response = await fetch(`${API_URL}/docker/dockerfile`);
+            if (!response.ok) throw new Error('Failed to fetch Dockerfiles');
+            const data = await response.json();
+            setDockerfiles(Array.isArray(data)
+                ? data.map(f => ({
+                    filePath: f.filePath || f.path || '',
+                    name: f.name || f.filePath?.split('/').pop().split('\\').pop() || ''
+                }))
+                : []);
+        } catch (error) {
+            showNotification('Error fetching Dockerfiles: ' + error.message, 'error');
+            setDockerfiles([]);
         }
     }, [showNotification]);
 
@@ -60,32 +81,6 @@ const Docker_Images = () => {
             showNotification(error.message, 'error');
         } finally {
             setIsLoading(false);
-        }
-    };
-
-    const handleUploadImage = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        try {
-            setIsUploading(true);
-            const formData = new FormData();
-            formData.append('imageFile', file);
-
-            const response = await fetch(`${API_URL}/docker/images/load`, {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!response.ok) throw new Error('Failed to upload image');
-            showNotification('Image uploaded successfully');
-            setIsUploadModalOpen(false);
-            fetchImages();
-        } catch (error) {
-            showNotification(error.message, 'error');
-        } finally {
-            setIsUploading(false);
-            setUploadProgress(0);
         }
     };
 
@@ -123,22 +118,84 @@ const Docker_Images = () => {
         }
     };
 
+    const openBuildModal = () => {
+        fetchDockerfiles();
+        setSelectedDockerfile('');
+        setImageTag('');
+        setBuildOutput([]);
+        setUploadedDockerfile(null);
+        setIsBuildModalOpen(true);
+    };
+
+    const handleBuildImage = async (e) => {
+        e.preventDefault();
+        if ((!selectedDockerfile && !uploadedDockerfile) || !imageTag) return;
+        setIsBuildLoading(true);
+        setBuildOutput([]);
+        try {
+            let dockerfilePath = selectedDockerfile;
+            // If uploading a file, first upload it to the backend
+            if (uploadedDockerfile) {
+                const formData = new FormData();
+                formData.append('file', uploadedDockerfile);
+                // Save as a temp Dockerfile in backend dockerfiles dir
+                const uploadRes = await fetch(`${API_URL}/docker/dockerfile`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const uploadData = await uploadRes.json();
+                if (!uploadRes.ok) throw new Error(uploadData.message || 'Failed to upload Dockerfile');
+                dockerfilePath = uploadData.path || uploadData.filePath || uploadData.name;
+            }
+            const response = await fetch(`${API_URL}/docker/images/build-image`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    dockerfilePath: dockerfilePath,
+                    imageTag: imageTag
+                })
+            });
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                const lines = decoder.decode(value).split('\n');
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const data = JSON.parse(line);
+                        setBuildOutput(prev => [...prev, data.stream || data.error || data.message || '']);
+                    } catch (_) {
+                        // ignore
+                    }
+                }
+            }
+            showNotification('Image build completed');
+            fetchImages();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsBuildLoading(false);
+        }
+    };
+
     return (
         <div className="container mx-auto p-4">
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold">Docker Images</h1>
                 <div className="flex gap-2">
                     <Button
-                        onClick={() => setIsUploadModalOpen(true)}
-                        className="bg-green-500 text-white flex items-center gap-2"
-                    >
-                        <FiUpload /> Upload Image
-                    </Button>
-                    <Button
                         onClick={() => setIsPullModalOpen(true)}
                         className="bg-blue-500 text-white flex items-center gap-2"
                     >
                         <FiDownload /> Pull Image
+                    </Button>
+                    <Button
+                        onClick={openBuildModal}
+                        className="bg-purple-600 text-white flex items-center gap-2"
+                    >
+                        <FiBox /> Build from Dockerfile
                     </Button>
                 </div>
             </div>
@@ -259,42 +316,86 @@ const Docker_Images = () => {
                 </form>
             </Modal>
 
-            {/* Upload Image Modal */}
+            {/* Build Image Modal */}
             <Modal
-                isOpen={isUploadModalOpen}
-                onClose={() => setIsUploadModalOpen(false)}
-                title="Upload Image"
+                isOpen={isBuildModalOpen}
+                onClose={() => setIsBuildModalOpen(false)}
+                title="Build Docker Image from Dockerfile"
+                size="lg"
             >
-                <div className="space-y-4">
-                    <label
-                        className={`relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors
-                            ${isUploading ? 'bg-gray-50 border-gray-300' : 'hover:bg-gray-50 border-gray-300 hover:border-blue-500'}`}
-                    >
-                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                            {isUploading ? (
-                                <>
-                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                                    <p className="mt-2 text-sm text-gray-500">Uploading... {uploadProgress}%</p>
-                                </>
+                <form onSubmit={handleBuildImage} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Select or Upload Dockerfile</label>
+                        <div className="flex gap-2">
+                            <select
+                                className="w-full border rounded px-2 py-2"
+                                value={selectedDockerfile}
+                                onChange={e => {
+                                    setSelectedDockerfile(e.target.value);
+                                    setUploadedDockerfile(null);
+                                }}
+                                disabled={isBuildLoading}
+                            >
+                                <option value="">-- Select Dockerfile --</option>
+                                {dockerfiles.map(df => (
+                                    <option key={df.filePath} value={df.filePath}>{df.name}</option>
+                                ))}
+                            </select>
+                            <input
+                                type="file"
+                                accept=".dockerfile,.txt"
+                                className="block border rounded px-2 py-2 text-sm"
+                                onChange={e => {
+                                    if (e.target.files && e.target.files[0]) {
+                                        setUploadedDockerfile(e.target.files[0]);
+                                        setSelectedDockerfile('');
+                                    }
+                                }}
+                                disabled={isBuildLoading}
+                            />
+                        </div>
+                        {uploadedDockerfile && (
+                            <div className="text-xs text-green-700 mt-1">Selected file: {uploadedDockerfile.name}</div>
+                        )}
+                    </div>
+                    <FormInput
+                        label="Image Tag"
+                        value={imageTag}
+                        onChange={e => setImageTag(e.target.value)}
+                        placeholder="e.g. myapp:latest"
+                        required
+                        disabled={isBuildLoading}
+                    />
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Build Output</label>
+                        <div className="bg-gray-100 rounded p-2 h-48 overflow-auto text-xs font-mono">
+                            {buildOutput.length === 0 ? (
+                                <span className="text-gray-400">Build output will appear here...</span>
                             ) : (
-                                <>
-                                    <FiUpload className="w-8 h-8 mb-3 text-gray-500" />
-                                    <p className="mb-2 text-sm text-gray-500">
-                                        <span className="font-semibold">Click to upload</span> or drag and drop
-                                    </p>
-                                    <p className="text-xs text-gray-500">Docker image files (.tar)</p>
-                                </>
+                                buildOutput.map((line, i) => (
+                                    <div key={i} className={line.toLowerCase().includes('error') ? 'text-red-600' : 'text-gray-800'}>{line}</div>
+                                ))
                             )}
                         </div>
-                        <input
-                            type="file"
-                            accept=".tar"
-                            className="hidden"
-                            onChange={handleUploadImage}
-                            disabled={isUploading}
-                        />
-                    </label>
-                </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                        <Button
+                            type="button"
+                            onClick={() => setIsBuildModalOpen(false)}
+                            className="bg-gray-500 text-white"
+                            disabled={isBuildLoading}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="submit"
+                            className="bg-purple-600 text-white flex items-center gap-2"
+                            disabled={isBuildLoading || (!selectedDockerfile && !uploadedDockerfile) || !imageTag}
+                        >
+                            {isBuildLoading ? 'Building...' : (<><FiBox /> Build Image</>)}
+                        </Button>
+                    </div>
+                </form>
             </Modal>
         </div>
     );
