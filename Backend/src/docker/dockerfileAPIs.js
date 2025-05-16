@@ -3,14 +3,20 @@ const fs = require('fs');
 const path = require('path');
 const router = express.Router();
 
-// Create the dockerfiles directory if it doesn't exist
-const dockerfilesDir = path.join(__dirname, 'dockerfiles');
-fs.mkdirSync(dockerfilesDir, { recursive: true });
+// Create the default dockerfiles directory if it doesn't exist
+const defaultDockerfilesDir = path.join(__dirname, 'dockerfiles');
+fs.mkdirSync(defaultDockerfilesDir, { recursive: true });
 
 // Helper functions
 const handleError = (res, error) => {
     console.error('Dockerfile API Error:', error);
     res.status(error.statusCode || 500).json({ message: error.message || 'Internal Server Error' });
+};
+
+// Validate path to prevent directory traversal
+const validatePath = (basePath, filePath) => {
+    const resolvedPath = path.resolve(basePath, filePath);
+    return resolvedPath.startsWith(basePath) ? resolvedPath : null;
 };
 
 // Validate Dockerfile content
@@ -40,23 +46,35 @@ function validateDockerfile(content) {
 // List all Dockerfiles
 router.get('/', async (req, res) => {
     try {
-        const files = await fs.promises.readdir(dockerfilesDir);
-        const dockerfiles = await Promise.all(files.map(async file => {
-            const filePath = path.join(dockerfilesDir, file);
-            try {
-                const content = await fs.promises.readFile(filePath, 'utf-8');
-                return {
-                    name: file,
-                    filePath: path.relative(dockerfilesDir, filePath),
-                    content
-                };
-            } catch (err) {
-                console.warn(`Error reading file ${file}:`, err);
-                return null;
+        // Get Dockerfiles from both default directory and custom paths
+        const findDockerfiles = async (dir) => {
+            const dockerfiles = [];
+            const files = await fs.promises.readdir(dir, { withFileTypes: true });
+            
+            for (const file of files) {
+                const fullPath = path.join(dir, file.name);
+                if (file.isDirectory()) {
+                    const subDirFiles = await findDockerfiles(fullPath);
+                    dockerfiles.push(...subDirFiles);
+                } else if (file.name.toLowerCase().includes('dockerfile')) {
+                    try {
+                        const content = await fs.promises.readFile(fullPath, 'utf-8');
+                        dockerfiles.push({
+                            name: file.name,
+                            filePath: path.relative(defaultDockerfilesDir, fullPath),
+                            absolutePath: fullPath,
+                            content,
+                            isCustomPath: !fullPath.startsWith(defaultDockerfilesDir)
+                        });
+                    } catch (err) {
+                        console.warn(`Error reading file ${fullPath}:`, err);
+                    }
+                }
             }
-        }));
-        
-        // Filter out any null entries from failed reads
+            return dockerfiles;
+        };
+
+        const dockerfiles = await findDockerfiles(defaultDockerfilesDir);
         res.json(dockerfiles.filter(Boolean));
     } catch (error) {
         handleError(res, error);
@@ -66,7 +84,7 @@ router.get('/', async (req, res) => {
 // Get Dockerfile by name
 router.get('/:name', async (req, res) => {
     try {
-        const filePath = path.join(dockerfilesDir, req.params.name);
+        const filePath = path.join(defaultDockerfilesDir, req.params.name);
         if (!fs.existsSync(filePath)) {
             return res.status(404).json({ message: 'Dockerfile not found' });
         }
@@ -80,7 +98,7 @@ router.get('/:name', async (req, res) => {
 // Create new Dockerfile
 router.post('/', async (req, res) => {
     try {
-        let { filePath, content } = req.body;
+        let { filePath, content, useCustomPath = false } = req.body;
 
         if (!content) {
             return res.status(400).json({ message: 'content is required.' });
@@ -90,9 +108,20 @@ router.post('/', async (req, res) => {
             filePath = `Dockerfile_${Date.now()}`;
         }
 
-        // Ensure we only use the filename part
-        const filename = path.basename(filePath);
-        const finalPath = path.join(dockerfilesDir, filename);
+        let finalPath;
+        if (useCustomPath) {
+            // For custom paths, ensure the directory exists
+            const dir = path.dirname(filePath);
+            if (!path.isAbsolute(filePath)) {
+                filePath = path.resolve(process.cwd(), filePath);
+            }
+            await fs.promises.mkdir(dir, { recursive: true });
+            finalPath = filePath;
+        } else {
+            // For default directory, just use the filename
+            const filename = path.basename(filePath);
+            finalPath = path.join(defaultDockerfilesDir, filename);
+        }
 
         // Validate Dockerfile content
         const allErrors = validateDockerfile(content);
@@ -103,12 +132,14 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ errors });
         }
 
+        await fs.promises.mkdir(path.dirname(finalPath), { recursive: true });
         await fs.promises.writeFile(finalPath, content);
         res.status(201).json({
-            message: `Dockerfile created successfully`,
+            message: 'Dockerfile created successfully',
             warnings,
-            name: filename,
-            filePath: filename
+            name: path.basename(finalPath),
+            filePath: finalPath,
+            isCustomPath: useCustomPath
         });
     } catch (error) {
         handleError(res, error);
@@ -123,7 +154,7 @@ router.put('/:name', async (req, res) => {
             return res.status(400).json({ message: 'content is required.' });
         }
 
-        const filePath = path.join(dockerfilesDir, req.params.name);
+        const filePath = path.join(defaultDockerfilesDir, req.params.name);
         if (!fs.existsSync(filePath)) {
             return res.status(404).json({ message: 'Dockerfile not found' });
         }
@@ -150,7 +181,7 @@ router.put('/:name', async (req, res) => {
 // Delete Dockerfile
 router.delete('/:name', async (req, res) => {
     try {
-        const filePath = path.join(dockerfilesDir, req.params.name);
+        const filePath = path.join(defaultDockerfilesDir, req.params.name);
         if (!fs.existsSync(filePath)) {
             return res.status(404).json({ message: 'Dockerfile not found' });
         }

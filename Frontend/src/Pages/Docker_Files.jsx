@@ -27,6 +27,7 @@ const DockerFilesManager = () => {
 
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedTemplate, setSelectedTemplate] = useState(null);
+    const [useCustomPath, setUseCustomPath] = useState(false);
 
     const templates = [
         {
@@ -100,6 +101,17 @@ CMD ["nginx", "-g", "daemon off;"]`
         }
     ];
 
+    const isAbsolutePath = (filepath) => {
+        return filepath.startsWith('/') || /^[A-Za-z]:/.test(filepath);
+    };
+
+    const validatePath = (filepath) => {
+        if (!useCustomPath) return null;
+        if (!filepath) return "Path is required";
+        if (!isAbsolutePath(filepath)) return "Please provide an absolute path";
+        return null;
+    };
+
     const showNotification = useCallback((message, type = 'info') => {
         setNotification({ message, type });
         setTimeout(() => setNotification(null), 5000);
@@ -128,16 +140,12 @@ CMD ["nginx", "-g", "daemon off;"]`
 
     useEffect(() => {
         fetchDockerfiles();
-    }, [fetchDockerfiles]);
-
-    const handleDockerfileContentChange = (value) => {
-        setDockerfileContent(value);
-    };
-
-    const handleDockerfilePathChange = (e) => {
+    }, [fetchDockerfiles]);    const handleDockerfilePathChange= (e) => {
         let value = e.target.value;
         value = value.replace(/\\/g, '/');
-        if (value.length > 1 && value.endsWith('/')) value = value.slice(0, -1);
+        if (!useCustomPath && value.length > 1 && value.endsWith('/')) {
+            value = value.slice(0, -1);
+        }
         setDockerfilePath(value);
     };
 
@@ -152,6 +160,7 @@ CMD ["nginx", "-g", "daemon off;"]`
             showNotification('Content copied to clipboard!', 'success');
         } catch (error) {
             showNotification('Failed to copy content', 'error');
+            console.error('Copy error:', error);
         }
     };
 
@@ -166,7 +175,8 @@ CMD ["nginx", "-g", "daemon off;"]`
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     filePath: dockerfilePath || `Dockerfile_${Date.now()}`,
-                    content: dockerfileContent 
+                    content: dockerfileContent,
+                    useCustomPath
                 })
             });
             const data = await response.json();
@@ -182,6 +192,7 @@ CMD ["nginx", "-g", "daemon off;"]`
             setDockerfileContent('FROM ');
             setDockerfilePath('');
             setSelectedTemplate(null);
+            setUseCustomPath(false);
             await fetchDockerfiles();
         } catch (error) {
             setBackendErrors([error.message]);
@@ -263,6 +274,42 @@ CMD ["nginx", "-g", "daemon off;"]`
 
     const filteredDockerfiles = dockerfiles.filter(file => 
         file.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const renderPathInput = () => (
+        <div className="space-y-4">
+            <div className="flex items-center space-x-2">
+                <input
+                    type="checkbox"
+                    id="useCustomPath"
+                    checked={useCustomPath}
+                    onChange={(e) => {
+                        setUseCustomPath(e.target.checked);
+                        setDockerfilePath(''); // Clear path when switching modes
+                    }}
+                    className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                />
+                <label htmlFor="useCustomPath" className="text-sm text-gray-700">
+                    Use custom directory path
+                </label>
+            </div>
+            <FormInput
+                label={useCustomPath ? "Full Directory Path" : "Dockerfile Name"}
+                value={dockerfilePath}
+                onChange={handleDockerfilePathChange}
+                placeholder={useCustomPath 
+                    ? "e.g. /path/to/your/project/Dockerfile" 
+                    : "e.g. Dockerfile.dev"}
+                required
+                error={validatePath(dockerfilePath)}
+            />
+            {useCustomPath && (
+                <p className="text-sm text-gray-500">
+                    Provide an absolute path where you want to create the Dockerfile. 
+                    For example: "/home/user/project/Dockerfile" or "C:/Projects/MyApp/Dockerfile"
+                </p>
+            )}
+        </div>
     );
 
     return (
@@ -357,13 +404,7 @@ CMD ["nginx", "-g", "daemon off;"]`
                 size="lg"
             >
                 <div className="space-y-4">
-                    <FormInput
-                        label="Dockerfile Name"
-                        value={dockerfilePath}
-                        onChange={handleDockerfilePathChange}
-                        placeholder="e.g. Dockerfile.dev"
-                        required
-                    />
+                    {renderPathInput()}
 
                     <div className="mb-4">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -483,8 +524,7 @@ CMD ["nginx", "-g", "daemon off;"]`
                         >
                             Cancel
                         </Button>
-                        <Button
-                            onClick={handleEditSave}
+                        <Button                            onClick={handleEditSave}
                             className="bg-blue-500 hover:bg-blue-600 text-white"
                             disabled={isLoading}
                         >
