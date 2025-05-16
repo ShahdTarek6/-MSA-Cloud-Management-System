@@ -1,7 +1,5 @@
 const express = require('express');
 const { docker } = require('./index');
-const fs = require('fs');
-const path = require('path');
 const router = express.Router();
 
 // Helper functions
@@ -10,30 +8,6 @@ const handleError = (res, error) => {
     console.error('Docker API Error:', error);
     res.status(error.statusCode || 500).json({ message: error.message || 'Internal Server Error' });
 };
-
-// Validate Dockerfile content
-function validateDockerfile(content) {
-    const errors = [];
-    const lines = content.split(/\r?\n/).map(l => l.trim());
-    const fromRegex = /^FROM\s+.+/i;
-    const cmdRegex = /^CMD\s+/i;
-    const dangerousRegex = /rm\s+-rf\s+\//i;
-    const maxSize = 1024; // 1KB
-
-    if (!lines[0] || !fromRegex.test(lines[0])) {
-        errors.push('Dockerfile must start with a valid FROM instruction.');
-    }
-    if (dangerousRegex.test(content)) {
-        errors.push("Dockerfile contains dangerous commands like 'rm -rf /'.");
-    }
-    if (content.length > maxSize) {
-        errors.push('Dockerfile exceeds maximum allowed size (1KB).');
-    }
-    if (!lines.some(line => cmdRegex.test(line))) {
-        errors.push('Warning: Dockerfile does not contain a CMD instruction.');
-    }
-    return errors;
-}
 
 // List images
 router.get('/', async (req, res) => {
@@ -68,6 +42,128 @@ router.get('/:name/history', async (req, res) => {
         handleError(res, error);
     }
 });
+
+// Dockerfile Routes
+const dockerfileRouter = express.Router();
+
+// Create Dockerfile
+dockerfileRouter.post('/', async (req, res) => {
+    try {
+        let { filePath, content } = req.body;
+        if (!content) {
+            return res.status(400).json({ message: 'content is required.' });
+        }
+
+        const dockerfilesDir = path.join(__dirname, 'dockerfiles');
+        fs.mkdirSync(dockerfilesDir, { recursive: true });
+
+        if (!filePath) {
+            filePath = `Dockerfile_${Date.now()}`;
+        }
+
+        const finalPath = path.join(dockerfilesDir, path.basename(filePath));
+        const allErrors = validateDockerfile(content);
+        const errors = allErrors.filter(e => !e.startsWith('Warning'));
+        const warnings = allErrors.filter(e => e.startsWith('Warning'));
+
+        if (errors.length) {
+            return res.status(400).json({ errors });
+        }
+
+        fs.writeFileSync(finalPath, content);
+        return res.json({
+            message: `Dockerfile written to ${finalPath}`,
+            warnings
+        });
+    } catch (err) {
+        console.error('Error creating Dockerfile:', err);
+        return res.status(500).json({ message: err.message || 'Internal server error.' });
+    }
+});
+
+// List Dockerfiles
+dockerfileRouter.get('/', async (req, res) => {
+    try {
+        const dockerfilesDir = path.join(__dirname, 'dockerfiles');
+        fs.mkdirSync(dockerfilesDir, { recursive: true });
+        
+        const files = fs.readdirSync(dockerfilesDir);
+        const dockerfiles = files.map(file => ({
+            filePath: path.join(dockerfilesDir, file),
+            name: file
+        }));
+        
+        res.json(dockerfiles);
+    } catch (error) {
+        console.error('Error listing Dockerfiles:', error);
+        res.status(500).json({ message: error.message || 'Failed to list Dockerfiles.' });
+    }
+});
+
+// View Dockerfile
+dockerfileRouter.get('/:name', async (req, res) => {
+    try {
+        const dockerfilesDir = path.join(__dirname, 'dockerfiles');
+        const fullPath = path.join(dockerfilesDir, req.params.name);
+        
+        if (!fs.existsSync(fullPath)) {
+            return res.status(404).json({ message: 'Dockerfile not found.' });
+        }
+        
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        res.json({ content });
+    } catch (error) {
+        console.error('Error reading Dockerfile:', error);
+        handleError(res, error);
+    }
+});
+
+// Update Dockerfile
+dockerfileRouter.put('/:name', async (req, res) => {
+    try {
+        const { content } = req.body;
+        if (!content) {
+            return res.status(400).json({ message: 'content is required.' });
+        }
+        
+        const dockerfilesDir = path.join(__dirname, 'dockerfiles');
+        const fullPath = path.join(dockerfilesDir, req.params.name);
+        
+        const errors = validateDockerfile(content);
+        if (errors.some(e => !e.startsWith('Warning'))) {
+            return res.status(400).json({ errors });
+        }
+        
+        fs.writeFileSync(fullPath, content);
+        res.json({ 
+            message: 'Dockerfile updated successfully.',
+            warnings: errors.filter(e => e.startsWith('Warning'))
+        });
+    } catch (error) {
+        console.error('Error updating Dockerfile:', error);
+        handleError(res, error);
+    }
+});
+
+// Delete Dockerfile
+dockerfileRouter.delete('/:name', async (req, res) => {
+    try {
+        const dockerfilesDir = path.join(__dirname, 'dockerfiles');
+        const fullPath = path.join(dockerfilesDir, req.params.name);
+        
+        if (!fs.existsSync(fullPath)) {
+            return res.status(404).json({ message: 'Dockerfile not found.' });
+        }
+        
+        fs.unlinkSync(fullPath);
+        res.json({ message: 'Dockerfile deleted successfully.' });
+    } catch (error) {
+        console.error('Error deleting Dockerfile:', error);
+        handleError(res, error);
+    }
+});
+
+router.use('/dockerfile', dockerfileRouter);
 
 // Create/Pull image
 router.post('/create', async (req, res) => {
