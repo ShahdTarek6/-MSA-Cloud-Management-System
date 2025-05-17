@@ -3,7 +3,7 @@ import { Button } from '../component/Button';
 import { FormInput } from '../component/FormInput';
 import { Modal } from '../component/Modal';
 import { Notification } from '../component/Notification';
-import { FiPlay, FiSquare, FiPause, FiTrash2, FiPlus, FiFileText } from 'react-icons/fi';
+import { FiPlay, FiSquare, FiPause, FiTrash2, FiPlus, FiFileText, FiRefreshCw, FiZap } from 'react-icons/fi';
 import RefreshButton from '../component/RefreshButton';
 
 const API_URL = 'http://localhost:3000/api';
@@ -181,7 +181,7 @@ const Docker_Containers = () => {
                                 </Button>
                             )}
 
-                            {/* Show Stop and Pause buttons only when container is running */}
+                            {/* Show Stop, Pause, Restart, and Kill buttons only when container is running */}
                             {container.State === 'running' && (
                                 <>
                                     <Button
@@ -195,6 +195,18 @@ const Docker_Containers = () => {
                                         className="flex-1 bg-blue-500 text-white flex items-center justify-center gap-1"
                                     >
                                         <FiPause /> Pause
+                                    </Button>
+                                    <Button
+                                        onClick={() => handleContainerAction(container.Id, 'restart')}
+                                        className="flex-1 bg-purple-500 text-white flex items-center justify-center gap-1"
+                                    >
+                                        <FiRefreshCw /> Restart
+                                    </Button>
+                                    <Button
+                                        onClick={() => handleContainerAction(container.Id, 'kill')}
+                                        className="flex-1 bg-red-500 text-white flex items-center justify-center gap-1"
+                                    >
+                                        <FiZap /> Kill
                                     </Button>
                                 </>
                             )}

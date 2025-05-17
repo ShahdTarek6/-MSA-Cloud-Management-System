@@ -3,7 +3,7 @@ import { Button } from '../component/Button';
 import { FormInput } from '../component/FormInput';
 import { Modal } from '../component/Modal';
 import { Notification } from '../component/Notification';
-import { FiUpload, FiDownload, FiTrash2, FiSearch, FiTag, FiBox, FiPlay, FiPause, FiSquare, FiPlus } from 'react-icons/fi';
+import { FiUpload, FiDownload, FiTrash2, FiSearch, FiTag, FiBox, FiPlay, FiPause, FiSquare, FiPlus, FiRefreshCw, FiZap } from 'react-icons/fi';
 import RefreshButton from '../component/RefreshButton';
 
 // Helper function to get filename from path
@@ -19,6 +19,8 @@ const Docker_Images = () => {
     const [images, setImages] = useState([]);
     const [isPullModalOpen, setIsPullModalOpen] = useState(false);
     const [isBuildModalOpen, setIsBuildModalOpen] = useState(false);
+    const [isTagModalOpen, setIsTagModalOpen] = useState(false);
+    const [selectedImage, setSelectedImage] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [notification, setNotification] = useState(null);
     const [dockerfiles, setDockerfiles] = useState([]);
@@ -31,6 +33,11 @@ const Docker_Images = () => {
     const [pullForm, setPullForm] = useState({
         fromImage: '',
         tag: 'latest'
+    });
+
+    const [tagForm, setTagForm] = useState({
+        repo: '',
+        tag: ''
     });
 
     const showNotification = useCallback((message, type = 'info') => {
@@ -68,10 +75,14 @@ const Docker_Images = () => {
 
     useEffect(() => {
         fetchImages();
-        // Refresh the list periodically
-        const interval = setInterval(fetchImages, 10000);
+        fetchDockerfiles();
+        // Refresh the lists periodically
+        const interval = setInterval(() => {
+            fetchImages();
+            fetchDockerfiles();
+        }, 10000);
         return () => clearInterval(interval);
-    }, [fetchImages]);
+    }, [fetchImages, fetchDockerfiles]);
 
     const handlePullImage = async (e) => {
         e.preventDefault();
@@ -199,6 +210,36 @@ const Docker_Images = () => {
         }
     };
 
+    const handleTagImage = async (e) => {
+        e.preventDefault();
+        if (!selectedImage) return;
+        
+        try {
+            setIsLoading(true);
+            const response = await fetch(`${API_URL}/docker/images/${selectedImage.Id}/tag?repo=${encodeURIComponent(tagForm.repo)}&tag=${encodeURIComponent(tagForm.tag)}`, {
+                method: 'POST'
+            });
+            if (!response.ok) throw new Error('Failed to tag image');
+            showNotification('Image tagged successfully');
+            setIsTagModalOpen(false);
+            setTagForm({ repo: '', tag: '' });
+            fetchImages();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const openTagModal = (image) => {
+        setSelectedImage(image);
+        setTagForm({
+            repo: image.RepoTags?.[0]?.split(':')[0] || '',
+            tag: 'latest'
+        });
+        setIsTagModalOpen(true);
+    };
+
     return (
         <div className="container mx-auto p-4">
             <div className="flex justify-between items-center mb-6">
@@ -239,13 +280,19 @@ const Docker_Images = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {images.map(image => (
                     <div key={image.Id} className="bg-white p-4 rounded-lg shadow-md">
-                        <h3 className="font-bold mb-2 truncate">
-                            {image.RepoTags?.[0] || 'Untitled'}
+                        <h3 className="font-bold mb-2">
+                            {image.RepoTags?.[0] || image.Id.substring(7, 19)}
                         </h3>
-                        <p className="text-sm mb-1">ID: {image.Id.substring(7, 19)}</p>
-                        <p className="text-sm mb-1">Created: {new Date(image.Created * 1000).toLocaleDateString()}</p>
-                        <p className="text-sm mb-2">Size: {(image.Size / 1024 / 1024).toFixed(2)} MB</p>
-                        <div className="flex gap-2 mt-4">
+                        <p className="text-sm mb-2">Size: {(image.Size / (1024 * 1024)).toFixed(2)} MB</p>
+                        <p className="text-sm mb-2">Created: {new Date(image.Created * 1000).toLocaleDateString()}</p>
+                        
+                        <div className="flex flex-wrap gap-2 mt-4">
+                            <Button
+                                onClick={() => openTagModal(image)}
+                                className="flex-1 bg-blue-500 text-white flex items-center justify-center gap-1"
+                            >
+                                <FiTag /> Tag
+                            </Button>
                             <Button
                                 onClick={() => handleDeleteImage(image.Id)}
                                 className="flex-1 bg-red-500 text-white flex items-center justify-center gap-1"
@@ -452,6 +499,60 @@ const Docker_Images = () => {
                         </Button>
                     </div>
                 </div>
+            </Modal>
+
+            {/* Add Tag Image Modal */}
+            <Modal
+                isOpen={isTagModalOpen}
+                onClose={() => setIsTagModalOpen(false)}
+                title="Tag Image"
+            >
+                <form onSubmit={handleTagImage} className="space-y-4">
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Current Image
+                        </label>
+                        <div className="bg-gray-50 p-2 rounded text-sm">
+                            {selectedImage?.RepoTags?.[0] || selectedImage?.Id?.substring(7, 19) || 'Unknown Image'}
+                        </div>
+                    </div>
+                    <FormInput
+                        label="Repository Name"
+                        value={tagForm.repo}
+                        onChange={(e) => setTagForm({
+                            ...tagForm,
+                            repo: e.target.value
+                        })}
+                        placeholder="e.g., myapp"
+                        required
+                    />
+                    <FormInput
+                        label="Tag"
+                        value={tagForm.tag}
+                        onChange={(e) => setTagForm({
+                            ...tagForm,
+                            tag: e.target.value
+                        })}
+                        placeholder="e.g., latest"
+                        required
+                    />
+                    <Button
+                        type="submit"
+                        className="w-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center gap-2"
+                        disabled={isLoading}
+                    >
+                        {isLoading ? (
+                            <>
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                Tagging...
+                            </>
+                        ) : (
+                            <>
+                                <FiTag /> Tag Image
+                            </>
+                        )}
+                    </Button>
+                </form>
             </Modal>
         </div>
     );
