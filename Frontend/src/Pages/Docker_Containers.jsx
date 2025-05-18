@@ -3,7 +3,7 @@ import { Button } from '../component/Button';
 import { FormInput } from '../component/FormInput';
 import { Modal } from '../component/Modal';
 import { Notification } from '../component/Notification';
-import { FiPlay, FiSquare, FiPause, FiTrash2, FiPlus, FiRefreshCw, FiZap, FiSearch, FiBox, FiCpu, FiHardDrive, FiActivity } from 'react-icons/fi';
+import { FiPlay, FiSquare, FiPause, FiTrash2, FiPlus, FiRefreshCw, FiZap, FiSearch, FiBox, FiCpu, FiHardDrive, FiActivity, FiEdit, FiSettings } from 'react-icons/fi';
 import RefreshButton from '../component/RefreshButton';
 
 const API_URL = 'http://localhost:3000/api';
@@ -12,9 +12,15 @@ const Docker_Containers = () => {
     const [containers, setContainers] = useState([]);
     const [images, setImages] = useState([]);
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
+    const [selectedContainer, setSelectedContainer] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [notification, setNotification] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
+
+    const [renameForm, setRenameForm] = useState({
+        newName: ''
+    });
 
     const [createForm, setCreateForm] = useState({
         Image: '',
@@ -143,6 +149,30 @@ const Docker_Containers = () => {
         }
     };
 
+    const handleRenameContainer = async (e) => {
+        e.preventDefault();
+        if (!selectedContainer || !renameForm.newName) return;
+        
+        try {
+            setIsLoading(true);
+            const response = await fetch(`${API_URL}/docker/containers/${selectedContainer.Id}/rename?name=${renameForm.newName}`, {
+                method: 'POST'
+            });
+            
+            if (!response.ok) throw new Error('Failed to rename container');
+            
+            showNotification('Container renamed successfully');
+            setIsRenameModalOpen(false);
+            setRenameForm({ newName: '' });
+            setSelectedContainer(null);
+            fetchContainers();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // Filter containers based on search term
     const filteredContainers = containers.filter(container => 
         container.Names[0].toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -201,109 +231,79 @@ const Docker_Containers = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 gap-6 mt-8">
                 {filteredContainers.map(container => (
-                    <div key={container.Id} className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100">
-                        <div className="p-6">
-                            {/* Container Name and Status */}
-                            <div className="mb-6">
-                                <div className="flex items-center justify-between mb-3">
-                                    <h3 className="font-bold text-xl text-gray-800 truncate">
-                                        {container.Names[0].replace('/', '')}
-                                    </h3>
-                                    <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(container.State)}`}>
-                                        {container.State}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Container Details */}
-                            <div className="space-y-3 mb-6">
-                                <div className="flex items-center gap-2 text-gray-600">
-                                    <FiBox className="text-lg" />
-                                    <p className="text-sm truncate">{container.Image}</p>
-                                </div>
-                                <div className="flex items-center gap-2 text-gray-600">
-                                    <FiHardDrive className="text-lg" />
-                                    <p className="text-sm font-medium">{container.Id.substring(0, 12)}</p>
-                                </div>
-                                {container.Ports && container.Ports.length > 0 && (
-                                    <div className="flex items-center gap-2 text-gray-600">
-                                        <FiActivity className="text-lg" />
-                                        <div className="flex flex-wrap gap-2">
-                                            {container.Ports.map((port, index) => (
-                                                <span key={index} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-full border border-blue-100">
-                                                    {port.PublicPort}:{port.PrivatePort}/{port.Type}
-                                                </span>
-                                            ))}
-                                        </div>
+                    <div key={container.Id} className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition-shadow duration-300">
+                        <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                                <h3 className="text-xl font-semibold text-gray-800 mb-2">
+                                    {container.Names[0].substring(1)}
+                                </h3>
+                                <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-4">
+                                    <div className="flex items-center gap-2">
+                                        <FiBox className="text-blue-500" />
+                                        <span>{container.Image}</span>
                                     </div>
-                                )}
+                                    <div className="flex items-center gap-2">
+                                        <FiActivity className="text-gray-500" />
+                                        <span className={`px-3 py-1 rounded-full border ${getStatusColor(container.State)}`}>
+                                            {container.State}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
-
-                            {/* Action Buttons */}
-                            <div className="space-y-3">
-                                {/* Container Actions based on state */}
-                                {['created', 'exited', 'dead'].includes(container.State) && (
-                                    <Button
-                                        onClick={() => handleContainerAction(container.Id, 'start')}
-                                        className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
-                                        disabled={isLoading}
-                                    >
-                                        <FiPlay className="text-lg" /> Start
-                                    </Button>
-                                )}
-
-                                {container.State === 'running' && (
-                                    <div className="grid grid-cols-2 gap-2">
+                            <div className="flex gap-2">
+                                {container.State === 'running' ? (
+                                    <>
                                         <Button
                                             onClick={() => handleContainerAction(container.Id, 'stop')}
-                                            className="bg-gradient-to-r from-yellow-500 to-yellow-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
-                                            disabled={isLoading}
+                                            className="bg-yellow-500 hover:bg-yellow-600 text-white"
+                                            title="Stop"
                                         >
-                                            <FiSquare className="text-lg" /> Stop
+                                            <FiSquare />
                                         </Button>
                                         <Button
                                             onClick={() => handleContainerAction(container.Id, 'pause')}
-                                            className="bg-gradient-to-r from-blue-500 to-blue-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
-                                            disabled={isLoading}
+                                            className="bg-blue-500 hover:bg-blue-600 text-white"
+                                            title="Pause"
                                         >
-                                            <FiPause className="text-lg" /> Pause
+                                            <FiPause />
                                         </Button>
-                                        <Button
-                                            onClick={() => handleContainerAction(container.Id, 'restart')}
-                                            className="bg-gradient-to-r from-purple-500 to-purple-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
-                                            disabled={isLoading}
-                                        >
-                                            <FiRefreshCw className="text-lg" /> Restart
-                                        </Button>
-                                        <Button
-                                            onClick={() => handleContainerAction(container.Id, 'kill')}
-                                            className="bg-gradient-to-r from-red-500 to-red-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
-                                            disabled={isLoading}
-                                        >
-                                            <FiZap className="text-lg" /> Kill
-                                        </Button>
-                                    </div>
-                                )}
-
-                                {container.State === 'paused' && (
+                                    </>
+                                ) : container.State === 'paused' ? (
                                     <Button
                                         onClick={() => handleContainerAction(container.Id, 'unpause')}
-                                        className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
-                                        disabled={isLoading}
+                                        className="bg-green-500 hover:bg-green-600 text-white"
+                                        title="Unpause"
                                     >
-                                        <FiPlay className="text-lg" /> Unpause
+                                        <FiPlay />
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        onClick={() => handleContainerAction(container.Id, 'start')}
+                                        className="bg-green-500 hover:bg-green-600 text-white"
+                                        title="Start"
+                                    >
+                                        <FiPlay />
                                     </Button>
                                 )}
-
-                                {/* Delete Button */}
+                                <Button
+                                    onClick={() => {
+                                        setSelectedContainer(container);
+                                        setRenameForm({ newName: container.Names[0].substring(1) });
+                                        setIsRenameModalOpen(true);
+                                    }}
+                                    className="bg-blue-500 hover:bg-blue-600 text-white"
+                                    title="Rename"
+                                >
+                                    <FiEdit />
+                                </Button>
                                 <Button
                                     onClick={() => handleDeleteContainer(container.Id)}
-                                    className="w-full bg-gradient-to-r from-red-500 to-red-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
-                                    disabled={isLoading}
+                                    className="bg-red-500 hover:bg-red-600 text-white"
+                                    title="Delete"
                                 >
-                                    <FiTrash2 className="text-lg" /> Delete
+                                    <FiTrash2 />
                                 </Button>
                             </div>
                         </div>
@@ -408,6 +408,47 @@ const Docker_Containers = () => {
                             </>
                         )}
                     </Button>
+                </form>
+            </Modal>
+
+            {/* Rename Container Modal */}
+            <Modal
+                isOpen={isRenameModalOpen}
+                onClose={() => {
+                    setIsRenameModalOpen(false);
+                    setSelectedContainer(null);
+                    setRenameForm({ newName: '' });
+                }}
+                title="Rename Container"
+            >
+                <form onSubmit={handleRenameContainer} className="space-y-4">
+                    <FormInput
+                        label="New Name"
+                        value={renameForm.newName}
+                        onChange={(e) => setRenameForm({ newName: e.target.value })}
+                        placeholder="Enter new container name"
+                        required
+                    />
+                    <div className="flex justify-end gap-4">
+                        <Button
+                            type="button"
+                            onClick={() => {
+                                setIsRenameModalOpen(false);
+                                setSelectedContainer(null);
+                                setRenameForm({ newName: '' });
+                            }}
+                            className="bg-gray-500 hover:bg-gray-600 text-white"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="submit"
+                            className="bg-blue-500 hover:bg-blue-600 text-white"
+                            disabled={isLoading}
+                        >
+                            {isLoading ? 'Renaming...' : 'Rename'}
+                        </Button>
+                    </div>
                 </form>
             </Modal>
         </div>
