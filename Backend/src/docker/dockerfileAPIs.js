@@ -43,6 +43,74 @@ function validateDockerfile(content) {
     return errors;
 }
 
+// Helper function to get directory tree
+const getDirectoryTree = (dirPath) => {
+    const stats = fs.statSync(dirPath);
+    const name = path.basename(dirPath);
+
+    if (!stats.isDirectory()) {
+        return {
+            name,
+            path: dirPath,
+            type: 'file'
+        };
+    }
+
+    try {
+        const items = fs.readdirSync(dirPath);
+        const children = items
+            .map(item => {
+                const fullPath = path.join(dirPath, item);
+                try {
+                    // Skip node_modules, .git directories and hidden files
+                    if (item === 'node_modules' || item === '.git' || item.startsWith('.')) {
+                        return null;
+                    }
+                    return getDirectoryTree(fullPath);
+                } catch (err) {
+                    console.warn(`Skipping ${fullPath} due to error:`, err);
+                    return null;
+                }
+            })
+            .filter(item => item !== null)
+            .sort((a, b) => {
+                // Directories first, then files
+                if (a.type === 'directory' && b.type !== 'directory') return -1;
+                if (a.type !== 'directory' && b.type === 'directory') return 1;
+                return a.name.localeCompare(b.name);
+            });
+
+        return {
+            name,
+            path: dirPath,
+            type: 'directory',
+            children
+        };
+    } catch (err) {
+        console.error(`Error reading directory ${dirPath}:`, err);
+        return {
+            name,
+            path: dirPath,
+            type: 'directory',
+            error: err.message,
+            children: []
+        };
+    }
+};
+
+// Get directory tree
+router.get('/directory-tree', (req, res) => {
+    try {
+        // Start from the workspace root
+        const workspaceRoot = process.cwd();
+        const tree = getDirectoryTree(workspaceRoot);
+        res.json([tree]); // Wrap in array to match frontend expectation
+    } catch (error) {
+        console.error('Error getting directory tree:', error);
+        res.status(500).json({ message: error.message || 'Failed to get directory tree' });
+    }
+});
+
 // List all Dockerfiles
 router.get('/', async (req, res) => {
     try {
@@ -92,33 +160,19 @@ router.get('/:name', async (req, res) => {
 // Create new Dockerfile
 router.post('/', async (req, res) => {
     try {
-        let { filePath, content, useCustomPath = false } = req.body;
+        let { filePath, content } = req.body;
 
         if (!content) {
             return res.status(400).json({ message: 'content is required.' });
         }
 
         if (!filePath) {
-            filePath = `Dockerfile_${Date.now()}.dockerfile`;
-        } else if (!filePath.toLowerCase().endsWith('.dockerfile') && filePath.toLowerCase() !== 'dockerfile') {
-            // Append .dockerfile extension if not present
-            filePath = `${filePath}.dockerfile`;
+            filePath = path.join(defaultDockerfilesDir, `Dockerfile_${Date.now()}.dockerfile`);
         }
 
-        let finalPath;
-        if (useCustomPath) {
-            // For custom paths, ensure the directory exists
-            const dir = path.dirname(filePath);
-            if (!path.isAbsolute(filePath)) {
-                filePath = path.resolve(process.cwd(), filePath);
-            }
-            await fs.promises.mkdir(dir, { recursive: true });
-            finalPath = filePath;
-        } else {
-            // For default directory, just use the filename
-            const filename = path.basename(filePath);
-            finalPath = path.join(defaultDockerfilesDir, filename);
-        }
+        // Ensure the directory exists
+        const dir = path.dirname(filePath);
+        await fs.promises.mkdir(dir, { recursive: true });
 
         // Validate Dockerfile content
         const allErrors = validateDockerfile(content);
@@ -129,14 +183,12 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ errors });
         }
 
-        await fs.promises.mkdir(path.dirname(finalPath), { recursive: true });
-        await fs.promises.writeFile(finalPath, content);
+        await fs.promises.writeFile(filePath, content);
         res.status(201).json({
             message: 'Dockerfile created successfully',
             warnings,
-            name: path.basename(finalPath),
-            filePath: finalPath,
-            isCustomPath: useCustomPath
+            name: path.basename(filePath),
+            filePath: filePath
         });
     } catch (error) {
         handleError(res, error);

@@ -3,18 +3,22 @@ import { Button } from '../component/Button';
 import { FormInput } from '../component/FormInput';
 import { Modal } from '../component/Modal';
 import { Notification } from '../component/Notification';
+import { Select } from '../component/Select';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
-import { FiFile, FiTrash2, FiEdit2, FiPlus, FiSearch, FiCopy, FiBox } from 'react-icons/fi';
+import { FiFile, FiTrash2, FiEdit2, FiPlus, FiSearch, FiCopy, FiBox, FiFolder, FiFolderPlus, FiChevronRight, FiChevronDown, FiUpload } from 'react-icons/fi';
 
 const API_URL = 'http://localhost:3000/api';
+const DEFAULT_DOCKERFILE_PATH = 'E:\\MSA material\\sana 4\\cloud\\code\\-MSA-Cloud-Management-System\\Backend\\src\\docker\\dockerfiles';
 
 const DockerFilesManager = () => {
     const [dockerfileContent, setDockerfileContent] = useState('FROM ');
-    const [dockerfilePath, setDockerfilePath] = useState('Dockerfile');
+    const [dockerfileName, setDockerfileName] = useState('Dockerfile');
     const [isLoading, setIsLoading] = useState(false);
     const [isDockerfileModalOpen, setIsDockerfileModalOpen] = useState(false);
     const [notification, setNotification] = useState(null);
+    const [selectedDirectory, setSelectedDirectory] = useState(DEFAULT_DOCKERFILE_PATH);
+    const [isCustomPath, setIsCustomPath] = useState(false);
 
     const [dockerfiles, setDockerfiles] = useState([]);
     const [selectedDockerfile, setSelectedDockerfile] = useState(null);
@@ -27,7 +31,6 @@ const DockerFilesManager = () => {
 
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedTemplate, setSelectedTemplate] = useState(null);
-    const [useCustomPath, setUseCustomPath] = useState(false);
 
     const [isBuildModalOpen, setIsBuildModalOpen] = useState(false);
     const [selectedBuildFile, setSelectedBuildFile] = useState(null);
@@ -107,17 +110,6 @@ CMD ["nginx", "-g", "daemon off;"]`
         }
     ];
 
-    const isAbsolutePath = (filepath) => {
-        return filepath.startsWith('/') || /^[A-Za-z]:/.test(filepath);
-    };
-
-    const validatePath = (filepath) => {
-        if (!useCustomPath) return null;
-        if (!filepath) return "Path is required";
-        if (!isAbsolutePath(filepath)) return "Please provide an absolute path";
-        return null;
-    };
-
     const showNotification = useCallback((message, type = 'info') => {
         setNotification({ message, type });
         setTimeout(() => setNotification(null), 5000);
@@ -148,58 +140,101 @@ CMD ["nginx", "-g", "daemon off;"]`
         fetchDockerfiles();
     }, [fetchDockerfiles]);
 
-    const handleDockerfilePathChange = (e) => {
-        let value = e.target.value;
-        // Only handle basic path separators
-        value = value.replace(/\\/g, '/');
-        if (!useCustomPath && value.length > 1 && value.endsWith('/')) {
-            value = value.slice(0, -1);
-        }
-        // Remove any automatically added .dockerfile extensions
-        value = value.replace(/\.dockerfile.*$/, '');
-        setDockerfilePath(value);
-    };
-
     const handleTemplateSelect = (template) => {
         setSelectedTemplate(template);
         setDockerfileContent(template.content);
     };
 
     const handleCreateDockerfile = async (e) => {
-        e?.preventDefault(); // Make it work both with form submit and button click
+        e?.preventDefault();
         setBackendErrors([]);
         setBackendWarnings([]);
+        
         try {
             setIsLoading(true);
-            // Add .dockerfile extension here only when submitting
-            let finalPath = dockerfilePath;
-            if (!useCustomPath && !finalPath.toLowerCase().endsWith('.dockerfile') && finalPath.toLowerCase() !== 'dockerfile') {
-                finalPath = `${finalPath}.dockerfile`;
-            }
             
-            const response = await fetch(`${API_URL}/docker/dockerfile`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    filePath: finalPath,
-                    content: dockerfileContent,
-                    useCustomPath
-                })
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                setBackendErrors(data.errors || [data.message]);
-                setBackendWarnings(data.warnings || []);
-                showNotification(data.message || 'Error creating Dockerfile', 'error');
+            // Validate custom path if selected
+            if (isCustomPath && !selectedDirectory.trim()) {
+                showNotification('Please enter a valid directory path', 'error');
                 return;
             }
-            setBackendWarnings(data.warnings || []);
-            showNotification('Dockerfile created successfully');
+
+            // Ensure dockerfile name has .dockerfile extension
+            let finalDockerfileName = dockerfileName;
+            if (!finalDockerfileName.toLowerCase().endsWith('.dockerfile')) {
+                finalDockerfileName += '.dockerfile';
+            }
+
+            // Construct the paths
+            let customPath, defaultPath;
+            if (isCustomPath) {
+                // Save to both custom and default locations
+                customPath = selectedDirectory.trim().replace(/[\\/]$/, '') + '\\' + finalDockerfileName;
+                defaultPath = DEFAULT_DOCKERFILE_PATH + '\\' + finalDockerfileName;
+
+                // First save to custom path
+                const customResponse = await fetch(`${API_URL}/docker/dockerfile`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        filePath: customPath,
+                        content: dockerfileContent
+                    })
+                });
+
+                if (!customResponse.ok) {
+                    const data = await customResponse.json();
+                    setBackendErrors(data.errors || [data.message]);
+                    setBackendWarnings(data.warnings || []);
+                    showNotification(data.message || 'Error creating Dockerfile in custom path', 'error');
+                    return;
+                }
+
+                // Then save to default path
+                const defaultResponse = await fetch(`${API_URL}/docker/dockerfile`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        filePath: defaultPath,
+                        content: dockerfileContent
+                    })
+                });
+
+                if (!defaultResponse.ok) {
+                    const data = await defaultResponse.json();
+                    setBackendWarnings([...(data.warnings || []), 'Failed to create backup copy in default location']);
+                }
+
+                showNotification('Dockerfile created successfully in both locations');
+            } else {
+                // Just save to default path for non-custom path
+                defaultPath = DEFAULT_DOCKERFILE_PATH + '\\' + finalDockerfileName;
+                const response = await fetch(`${API_URL}/docker/dockerfile`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        filePath: defaultPath,
+                        content: dockerfileContent
+                    })
+                });
+                
+                const data = await response.json();
+                if (!response.ok) {
+                    setBackendErrors(data.errors || [data.message]);
+                    setBackendWarnings(data.warnings || []);
+                    showNotification(data.message || 'Error creating Dockerfile', 'error');
+                    return;
+                }
+                
+                setBackendWarnings(data.warnings || []);
+                showNotification('Dockerfile created successfully');
+            }
+
             setIsDockerfileModalOpen(false);
             setDockerfileContent('FROM ');
-            setDockerfilePath('');
-            setSelectedTemplate(null);
-            setUseCustomPath(false);
+            setDockerfileName('Dockerfile');
+            setIsCustomPath(false);
+            setSelectedDirectory(DEFAULT_DOCKERFILE_PATH);
             await fetchDockerfiles();
         } catch (error) {
             setBackendErrors([error.message]);
@@ -469,45 +504,90 @@ CMD ["nginx", "-g", "daemon off;"]`
                 title="Create Dockerfile"
                 size="lg"
             >
-                <div className="space-y-4">
-                    <div className="space-y-4">
-                        <div className="flex items-center space-x-2">
-                            <input
-                                type="checkbox"
-                                id="useCustomPath"
-                                checked={useCustomPath}
-                                onChange={(e) => {
-                                    setUseCustomPath(e.target.checked);
-                                    setDockerfilePath(''); // Clear path when switching modes
-                                }}
-                                className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-                            />
-                            <label htmlFor="useCustomPath" className="text-sm text-gray-700">
-                                Use custom directory path
-                            </label>
+                <div className="space-y-6">
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-3">
+                            Directory Path
+                        </label>
+                        <div className="space-y-4">
+                            <div className="flex gap-4">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIsCustomPath(false);
+                                        setSelectedDirectory(DEFAULT_DOCKERFILE_PATH);
+                                    }}
+                                    className={`flex-1 py-2 px-4 rounded-lg border ${
+                                        !isCustomPath 
+                                            ? 'bg-blue-50 border-blue-500 text-blue-700' 
+                                            : 'border-gray-300 text-gray-700 hover:border-blue-300'
+                                    }`}
+                                >
+                                    Use Default Path
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsCustomPath(true)}
+                                    className={`flex-1 py-2 px-4 rounded-lg border ${
+                                        isCustomPath 
+                                            ? 'bg-blue-50 border-blue-500 text-blue-700' 
+                                            : 'border-gray-300 text-gray-700 hover:border-blue-300'
+                                    }`}
+                                >
+                                    Use Custom Path
+                                </button>
+                            </div>
+                            
+                            {!isCustomPath ? (
+                                <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                    <p className="text-sm text-gray-600">Using default path:</p>
+                                    <p className="text-sm font-mono mt-1">{DEFAULT_DOCKERFILE_PATH}</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <input
+                                        type="text"
+                                        value={selectedDirectory}
+                                        onChange={(e) => setSelectedDirectory(e.target.value)}
+                                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Enter absolute path (e.g., E:\MyProjects\DockerFiles)"
+                                    />
+                                    <p className="text-xs text-gray-500">
+                                        Enter the complete directory path where you want to save the Dockerfile.
+                                        Use backslashes (\) for Windows paths.
+                                    </p>
+                                    {selectedDirectory && !selectedDirectory.includes('\\') && (
+                                        <p className="text-xs text-yellow-600">
+                                            ⚠️ Remember to use complete path with backslashes (e.g., E:\MyFolder\SubFolder)
+                                        </p>
+                                    )}
+                                </div>
+                            )}
                         </div>
-                        <FormInput
-                            label={useCustomPath ? "Full Directory Path" : "Dockerfile Name"}
-                            value={dockerfilePath}
-                            onChange={handleDockerfilePathChange}
-                            placeholder={useCustomPath 
-                                ? "e.g. /path/to/your/project/service.dockerfile" 
-                                : "e.g. myservice (will add .dockerfile automatically)"}
-                            required
-                            error={validatePath(dockerfilePath)}
-                        />
-                        {useCustomPath && (
-                            <p className="text-sm text-gray-500">
-                                Provide an absolute path where you want to create the Dockerfile. 
-                                For example: "/home/user/project/service.dockerfile" or "C:/Projects/MyApp/service.dockerfile"
+                    </div>
+
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Dockerfile Name
+                        </label>
+                        <div className="space-y-2">
+                            <input
+                                type="text"
+                                value={dockerfileName}
+                                onChange={(e) => {
+                                    let newName = e.target.value;
+                                    // Remove .dockerfile extension if user types it
+                                    newName = newName.replace(/\.dockerfile$/i, '');
+                                    setDockerfileName(newName);
+                                }}
+                                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="e.g., Dockerfile or frontend"
+                            />
+                            <p className="text-xs text-gray-500">
+                                The extension .dockerfile will be added automatically. 
+                                Final name will be: {dockerfileName || 'filename'}.dockerfile
                             </p>
-                        )}
-                        {!useCustomPath && (
-                            <p className="text-sm text-gray-500">
-                                Enter the name without extension - '.dockerfile' will be added automatically. 
-                                Or use 'Dockerfile' for the default name.
-                            </p>
-                        )}
+                        </div>
                     </div>
 
                     <div className="mb-4">
@@ -575,10 +655,19 @@ CMD ["nginx", "-g", "daemon off;"]`
                         </Button>
                         <Button
                             onClick={handleCreateDockerfile}
-                            className="bg-blue-500 hover:bg-blue-600 text-white"
+                            className="bg-blue-500 hover:bg-blue-600 text-white flex items-center gap-2"
                             disabled={isLoading}
                         >
-                            {isLoading ? 'Creating...' : 'Create Dockerfile'}
+                            {isLoading ? (
+                                <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white" />
+                                    Creating...
+                                </>
+                            ) : (
+                                <>
+                                    <FiPlus /> Create Dockerfile
+                                </>
+                            )}
                         </Button>
                     </div>
                 </div>
