@@ -43,6 +43,7 @@ const Docker_Images = () => {
     const [buildOutput, setBuildOutput] = useState([]);
     const [isBuildLoading, setIsBuildLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [runningContainers, setRunningContainers] = useState({});
 
     const [pullForm, setPullForm] = useState({
         fromImage: '',
@@ -87,16 +88,37 @@ const Docker_Images = () => {
         }
     }, [showNotification]);
 
+    const fetchRunningContainers = useCallback(async () => {
+        try {
+            const response = await fetch(`${API_URL}/docker/containers?all=true`);
+            const containers = await response.json();
+            const containerMap = {};
+            containers.forEach(container => {
+                if (container.ImageID) {
+                    containerMap[container.ImageID] = {
+                        id: container.Id,
+                        state: container.State
+                    };
+                }
+            });
+            setRunningContainers(containerMap);
+        } catch (error) {
+            showNotification('Error fetching containers: ' + error.message, 'error');
+        }
+    }, [showNotification]);
+
     useEffect(() => {
         fetchImages();
         fetchDockerfiles();
+        fetchRunningContainers();
         // Refresh the lists periodically
         const interval = setInterval(() => {
             fetchImages();
             fetchDockerfiles();
+            fetchRunningContainers();
         }, 10000);
         return () => clearInterval(interval);
-    }, [fetchImages, fetchDockerfiles]);
+    }, [fetchImages, fetchDockerfiles, fetchRunningContainers]);
 
     const handlePullImage = async (e) => {
         e.preventDefault();
@@ -265,6 +287,44 @@ const Docker_Images = () => {
                (image.Size && formatBytes(image.Size).toLowerCase().includes(searchLower));
     });
 
+    // Add container action handlers
+    const handleContainerAction = async (imageId, action) => {
+        try {
+            setIsLoading(true);
+            const container = runningContainers[imageId];
+            
+            if (action === 'start' && !container) {
+                // Create and start a new container
+                const response = await fetch(`${API_URL}/docker/containers?name=${imageId.substring(7, 19)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        Image: imageId,
+                        Tty: true,
+                        OpenStdin: true,
+                        StdinOnce: false,
+                        Cmd: ['tail', '-f', '/dev/null']  // Keep container running
+                    })
+                });
+                if (!response.ok) throw new Error('Failed to create container');
+                await fetchRunningContainers();
+                showNotification('Container created and started successfully');
+            } else if (container) {
+                // Perform action on existing container
+                const response = await fetch(`${API_URL}/docker/containers/${container.id}/${action}`, {
+                    method: 'POST'
+                });
+                if (!response.ok) throw new Error(`Failed to ${action} container`);
+                showNotification(`Container ${action}ed successfully`);
+                await fetchRunningContainers();
+            }
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <div className="container mx-auto p-4">
             <div className="flex justify-between items-center mb-6">
@@ -325,6 +385,65 @@ const Docker_Images = () => {
                         <p className="text-sm mb-2">Created: {new Date(image.Created * 1000).toLocaleDateString()}</p>
                         
                         <div className="flex flex-wrap gap-2 mt-4">
+                            {/* Container Actions */}
+                            {!runningContainers[image.Id] ? (
+                                <Button
+                                    onClick={() => handleContainerAction(image.Id, 'start')}
+                                    className="flex-1 bg-green-500 text-white flex items-center justify-center gap-1"
+                                    disabled={isLoading}
+                                >
+                                    <FiPlay /> Build Container
+                                </Button>
+                            ) : runningContainers[image.Id].state === 'running' ? (
+                                <>
+                                    <Button
+                                        onClick={() => handleContainerAction(image.Id, 'stop')}
+                                        className="flex-1 bg-yellow-500 text-white flex items-center justify-center gap-1"
+                                        disabled={isLoading}
+                                    >
+                                        <FiSquare /> Stop
+                                    </Button>
+                                    <Button
+                                        onClick={() => handleContainerAction(image.Id, 'pause')}
+                                        className="flex-1 bg-blue-500 text-white flex items-center justify-center gap-1"
+                                        disabled={isLoading}
+                                    >
+                                        <FiPause /> Pause
+                                    </Button>
+                                    <Button
+                                        onClick={() => handleContainerAction(image.Id, 'restart')}
+                                        className="flex-1 bg-purple-500 text-white flex items-center justify-center gap-1"
+                                        disabled={isLoading}
+                                    >
+                                        <FiRefreshCw /> Restart
+                                    </Button>
+                                    <Button
+                                        onClick={() => handleContainerAction(image.Id, 'kill')}
+                                        className="flex-1 bg-red-500 text-white flex items-center justify-center gap-1"
+                                        disabled={isLoading}
+                                    >
+                                        <FiZap /> Kill
+                                    </Button>
+                                </>
+                            ) : runningContainers[image.Id].state === 'paused' ? (
+                                <Button
+                                    onClick={() => handleContainerAction(image.Id, 'unpause')}
+                                    className="flex-1 bg-blue-500 text-white flex items-center justify-center gap-1"
+                                    disabled={isLoading}
+                                >
+                                    <FiPlay /> Unpause
+                                </Button>
+                            ) : (
+                                <Button
+                                    onClick={() => handleContainerAction(image.Id, 'start')}
+                                    className="flex-1 bg-green-500 text-white flex items-center justify-center gap-1"
+                                    disabled={isLoading}
+                                >
+                                    <FiPlay /> Start
+                                </Button>
+                            )}
+
+                            {/* Existing Image Actions */}
                             <Button
                                 onClick={() => openTagModal(image)}
                                 className="flex-1 bg-blue-500 text-white flex items-center justify-center gap-1"

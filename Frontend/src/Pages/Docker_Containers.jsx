@@ -22,7 +22,12 @@ const Docker_Containers = () => {
         ExposedPorts: {},
         HostConfig: {
             PortBindings: {}
-        }
+        },
+        Cmd: [],          // Command to run
+        Tty: true,        // Allocate a pseudo-TTY
+        OpenStdin: true,  // Keep STDIN open
+        StdinOnce: false, // Keep STDIN open even if not attached
+        Env: [],          // Environment variables
     });
 
     const showNotification = useCallback((message, type = 'info') => {
@@ -80,12 +85,24 @@ const Docker_Containers = () => {
         e.preventDefault();
         try {
             setIsLoading(true);
+            
+            // Format the command if provided
+            let containerConfig = {...createForm};
+            if (containerConfig.Cmd && typeof containerConfig.Cmd === 'string') {
+                containerConfig.Cmd = containerConfig.Cmd.split(' ').filter(cmd => cmd.trim() !== '');
+            }
+
             const response = await fetch(`${API_URL}/docker/containers?name=${createForm.name}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(createForm)
+                body: JSON.stringify(containerConfig)
             });
-            if (!response.ok) throw new Error('Failed to create container');
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to create container');
+            }
+
             showNotification('Container created successfully');
             setIsCreateModalOpen(false);
             setCreateForm({
@@ -94,7 +111,12 @@ const Docker_Containers = () => {
                 ExposedPorts: {},
                 HostConfig: {
                     PortBindings: {}
-                }
+                },
+                Cmd: [],
+                Tty: true,
+                OpenStdin: true,
+                StdinOnce: false,
+                Env: [],
             });
             fetchContainers();
         } catch (error) {
@@ -275,6 +297,7 @@ const Docker_Containers = () => {
                             ))}
                         </select>
                     </div>
+
                     <FormInput
                         label="Container Name"
                         value={createForm.name}
@@ -285,6 +308,46 @@ const Docker_Containers = () => {
                         placeholder="e.g., my-container"
                         required
                     />
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Command (optional)
+                        </label>
+                        <input
+                            type="text"
+                            value={Array.isArray(createForm.Cmd) ? createForm.Cmd.join(' ') : createForm.Cmd || ''}
+                            onChange={(e) => setCreateForm({
+                                ...createForm,
+                                Cmd: e.target.value
+                            })}
+                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="e.g., tail -f /dev/null"
+                        />
+                        <p className="mt-1 text-sm text-gray-500">
+                            Leave empty to use the default command from the image. For containers that need to keep running,
+                            you can use commands like "tail -f /dev/null" or the specific service command.
+                        </p>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Environment Variables (optional)
+                        </label>
+                        <textarea
+                            value={Array.isArray(createForm.Env) ? createForm.Env.join('\n') : ''}
+                            onChange={(e) => setCreateForm({
+                                ...createForm,
+                                Env: e.target.value.split('\n').filter(env => env.trim() !== '')
+                            })}
+                            className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="KEY1=value1&#10;KEY2=value2"
+                            rows={3}
+                        />
+                        <p className="mt-1 text-sm text-gray-500">
+                            Enter one environment variable per line in KEY=value format
+                        </p>
+                    </div>
+
                     <Button
                         type="submit"
                         className="w-full bg-green-500 hover:bg-green-600 text-white flex items-center justify-center gap-2"

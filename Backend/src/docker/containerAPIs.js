@@ -28,12 +28,42 @@ router.get('/', async (req, res) => {
 // Create container
 router.post('/', async (req, res) => {
     try {
-        const container = await docker.createContainer({
+        console.log('Creating container with config:', JSON.stringify(req.body, null, 2));
+        
+        // Ensure basic configuration is present
+        const containerConfig = {
             ...req.body,
-            name: req.query.name
-        });
-        res.status(201).json({ Id: container.id, Warnings: [] });
+            name: req.query.name,
+            // Default values for keeping containers running
+            Tty: req.body.Tty !== undefined ? req.body.Tty : true,
+            OpenStdin: req.body.OpenStdin !== undefined ? req.body.OpenStdin : true,
+            StdinOnce: req.body.StdinOnce !== undefined ? req.body.StdinOnce : false,
+        };
+
+        // Create the container
+        const container = await docker.createContainer(containerConfig);
+        console.log(`Container created with ID: ${container.id}`);
+
+        // Try to start the container immediately if it was created successfully
+        try {
+            await container.start();
+            console.log(`Container ${container.id} started successfully`);
+            res.status(201).json({ 
+                Id: container.id, 
+                Warnings: [],
+                message: 'Container created and started successfully' 
+            });
+        } catch (startError) {
+            console.error('Error starting container:', startError);
+            // If we can't start it, we'll still return success for creation
+            res.status(201).json({ 
+                Id: container.id, 
+                Warnings: [`Container created but failed to start: ${startError.message}`],
+                message: 'Container created but failed to start automatically'
+            });
+        }
     } catch (error) {
+        console.error('Error creating container:', error);
         handleError(res, error);
     }
 });
