@@ -13,6 +13,19 @@ const getFilename = (filepath) => {
     return parts[parts.length - 1];
 };
 
+// Helper function to format bytes into human readable format
+const formatBytes = (bytes, decimals = 2) => {
+    if (!bytes) return '0 Bytes';
+    
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+};
+
 const API_URL = 'http://localhost:3000/api';
 
 const Docker_Images = () => {
@@ -29,6 +42,7 @@ const Docker_Images = () => {
     const [imageTag, setImageTag] = useState('');
     const [buildOutput, setBuildOutput] = useState([]);
     const [isBuildLoading, setIsBuildLoading] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const [pullForm, setPullForm] = useState({
         fromImage: '',
@@ -240,6 +254,17 @@ const Docker_Images = () => {
         setIsTagModalOpen(true);
     };
 
+    // Filter images based on search term
+    const filteredImages = images.filter(image => {
+        const searchLower = searchTerm.toLowerCase();
+        const repoTags = image.RepoTags || [];
+        const id = (image.Id || '').toLowerCase();
+        
+        return repoTags.some(tag => tag.toLowerCase().includes(searchLower)) ||
+               id.includes(searchLower) ||
+               (image.Size && formatBytes(image.Size).toLowerCase().includes(searchLower));
+    });
+
     return (
         <div className="container mx-auto p-4">
             <div className="flex justify-between items-center mb-6">
@@ -277,13 +302,26 @@ const Docker_Images = () => {
                 />
             )}
 
+            <div className="mb-6">
+                <div className="relative">
+                    <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Search images by name, tag, or ID..."
+                        className="pl-10 pr-4 py-2 w-full border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {images.map(image => (
+                {filteredImages.map(image => (
                     <div key={image.Id} className="bg-white p-4 rounded-lg shadow-md">
                         <h3 className="font-bold mb-2">
                             {image.RepoTags?.[0] || image.Id.substring(7, 19)}
                         </h3>
-                        <p className="text-sm mb-2">Size: {(image.Size / (1024 * 1024)).toFixed(2)} MB</p>
+                        <p className="text-sm mb-2">Size: {formatBytes(image.Size)}</p>
                         <p className="text-sm mb-2">Created: {new Date(image.Created * 1000).toLocaleDateString()}</p>
                         
                         <div className="flex flex-wrap gap-2 mt-4">

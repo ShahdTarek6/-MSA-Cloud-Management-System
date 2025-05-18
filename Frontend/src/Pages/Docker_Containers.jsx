@@ -3,7 +3,7 @@ import { Button } from '../component/Button';
 import { FormInput } from '../component/FormInput';
 import { Modal } from '../component/Modal';
 import { Notification } from '../component/Notification';
-import { FiPlay, FiSquare, FiPause, FiTrash2, FiPlus, FiFileText, FiRefreshCw, FiZap } from 'react-icons/fi';
+import { FiPlay, FiSquare, FiPause, FiTrash2, FiPlus, FiRefreshCw, FiZap, FiSearch } from 'react-icons/fi';
 import RefreshButton from '../component/RefreshButton';
 
 const API_URL = 'http://localhost:3000/api';
@@ -14,8 +14,7 @@ const Docker_Containers = () => {
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [notification, setNotification] = useState(null);
-    const [showLogs, setShowLogs] = useState(false);
-    const [logs, setLogs] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
 
     const [createForm, setCreateForm] = useState({
         Image: '',
@@ -122,16 +121,12 @@ const Docker_Containers = () => {
         }
     };
 
-    const fetchContainerLogs = async (id) => {
-        try {
-            const response = await fetch(`${API_URL}/docker/containers/${id}/logs?stdout=true&stderr=true`);
-            const text = await response.text();
-            setLogs(text);
-            setShowLogs(true);
-        } catch (error) {
-            showNotification('Error fetching logs: ' + error.message, 'error');
-        }
-    };
+    // Filter containers based on search term
+    const filteredContainers = containers.filter(container => 
+        container.Names[0].toLowerCase().includes(searchTerm.toLowerCase()) ||
+        container.Image.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        container.State.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     return (
         <div className="container mx-auto p-4">
@@ -142,10 +137,23 @@ const Docker_Containers = () => {
                 </div>
                 <Button
                     onClick={() => setIsCreateModalOpen(true)}
-                    className="bg-green-500 text-white flex items-center gap-2"
+                    className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
                 >
                     <FiPlus /> Create Container
                 </Button>
+            </div>
+
+            <div className="mb-6">
+                <div className="relative">
+                    <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="Search containers by name, image, or state..."
+                        className="pl-10 pr-4 py-2 w-full border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
             </div>
 
             {notification && (
@@ -157,7 +165,7 @@ const Docker_Containers = () => {
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {containers.map(container => (
+                {filteredContainers.map(container => (
                     <div key={container.Id} className="bg-white p-4 rounded-lg shadow-md">
                         <h3 className="font-bold mb-2">
                             {container.Names[0].replace('/', '')}
@@ -220,13 +228,6 @@ const Docker_Containers = () => {
                                     <FiPlay /> Unpause
                                 </Button>
                             )}
-
-                            <Button
-                                onClick={() => fetchContainerLogs(container.Id)}
-                                className="flex-1 bg-purple-500 text-white flex items-center justify-center gap-1"
-                            >
-                                <FiFileText /> Logs
-                            </Button>
 
                             {/* Always show Delete button, but with different styling based on state */}
                             <Button
@@ -301,18 +302,6 @@ const Docker_Containers = () => {
                         )}
                     </Button>
                 </form>
-            </Modal>
-
-            {/* Logs Modal */}
-            <Modal
-                isOpen={showLogs}
-                onClose={() => setShowLogs(false)}
-                title="Container Logs"
-                size="lg"
-            >
-                <pre className="whitespace-pre-wrap bg-gray-100 p-4 rounded max-h-96 overflow-auto font-mono text-sm">
-                    {logs || 'No logs available'}
-                </pre>
             </Modal>
         </div>
     );
