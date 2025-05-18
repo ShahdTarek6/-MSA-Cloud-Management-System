@@ -378,12 +378,50 @@ const Docker_Images = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredImages.map(image => (
                     <div key={image.Id} className="bg-white p-4 rounded-lg shadow-md">
-                        <h3 className="font-bold mb-2">
-                            {image.RepoTags?.[0] || image.Id.substring(7, 19)}
-                        </h3>
-                        <p className="text-sm mb-2">Size: {formatBytes(image.Size)}</p>
-                        <p className="text-sm mb-2">Created: {new Date(image.Created * 1000).toLocaleDateString()}</p>
+                        {/* Image Name and ID Section */}
+                        <div className="mb-4">
+                            <h3 className="font-bold text-lg text-gray-800 mb-2">
+                                {/* Show first tag as main name, fallback to ID if no tags */}
+                                {(image.RepoTags && image.RepoTags[0] !== '<none>:<none>' 
+                                    ? image.RepoTags[0] 
+                                    : `Untagged Image`
+                                )}
+                            </h3>
+                            <p className="text-sm text-gray-600">
+                                <span className="font-medium">ID:</span> {image.Id.substring(7, 19)}
+                            </p>
+                            
+                            {/* Additional Tags (if any) */}
+                            {image.RepoTags && image.RepoTags.length > 1 && (
+                                <div className="mt-2">
+                                    <p className="text-sm font-medium text-gray-600 mb-1">Additional Tags:</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {image.RepoTags.slice(1).map(tag => (
+                                            tag !== '<none>:<none>' && (
+                                                <span
+                                                    key={tag}
+                                                    className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
+                                                >
+                                                    {tag}
+                                                </span>
+                                            )
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Image Details */}
+                        <div className="space-y-2 mb-4">
+                            <p className="text-sm text-gray-600">
+                                <span className="font-medium">Size:</span> {formatBytes(image.Size)}
+                            </p>
+                            <p className="text-sm text-gray-600">
+                                <span className="font-medium">Created:</span> {new Date(image.Created * 1000).toLocaleDateString()}
+                            </p>
+                        </div>
                         
+                        {/* Action Buttons */}
                         <div className="flex flex-wrap gap-2 mt-4">
                             {/* Container Actions */}
                             {!runningContainers[image.Id] ? (
@@ -443,7 +481,7 @@ const Docker_Images = () => {
                                 </Button>
                             )}
 
-                            {/* Existing Image Actions */}
+                            {/* Image Actions */}
                             <Button
                                 onClick={() => openTagModal(image)}
                                 className="flex-1 bg-blue-500 text-white flex items-center justify-center gap-1"

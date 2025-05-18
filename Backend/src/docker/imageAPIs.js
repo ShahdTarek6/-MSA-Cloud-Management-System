@@ -16,11 +16,19 @@ const handleError = (res, error) => {
 router.get('/', async (req, res) => {
     try {
         const images = await docker.listImages({
-            all: bool(req.query.all),
-            digests: bool(req.query.digests),
+            all: true,  // Include intermediate images
+            digests: true,  // Include digest information
             filters: req.query.filters ? JSON.parse(req.query.filters) : undefined
         });
-        res.json(images);
+
+        // Process images to ensure all tags are included
+        const processedImages = images.map(image => ({
+            ...image,
+            RepoTags: image.RepoTags || ['<none>:<none>'],
+            RepoDigests: image.RepoDigests || []
+        }));
+
+        res.json(processedImages);
     } catch (error) {
         handleError(res, error);
     }
