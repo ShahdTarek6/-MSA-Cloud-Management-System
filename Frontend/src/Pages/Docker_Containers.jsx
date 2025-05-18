@@ -3,7 +3,7 @@ import { Button } from '../component/Button';
 import { FormInput } from '../component/FormInput';
 import { Modal } from '../component/Modal';
 import { Notification } from '../component/Notification';
-import { FiPlay, FiSquare, FiPause, FiTrash2, FiPlus, FiRefreshCw, FiZap, FiSearch } from 'react-icons/fi';
+import { FiPlay, FiSquare, FiPause, FiTrash2, FiPlus, FiRefreshCw, FiZap, FiSearch, FiBox, FiCpu, FiHardDrive, FiActivity } from 'react-icons/fi';
 import RefreshButton from '../component/RefreshButton';
 
 const API_URL = 'http://localhost:3000/api';
@@ -150,32 +150,33 @@ const Docker_Containers = () => {
         container.State.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    // Add a helper function to format the container status
+    const getStatusColor = (state) => {
+        switch (state) {
+            case 'running':
+                return 'bg-green-100 text-green-800 border-green-200';
+            case 'paused':
+                return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+            case 'exited':
+                return 'bg-red-100 text-red-800 border-red-200';
+            default:
+                return 'bg-gray-100 text-gray-800 border-gray-200';
+        }
+    };
+
     return (
-        <div className="container mx-auto p-4">
-            <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-bold">Docker Containers</h1>
-                    <RefreshButton onRefresh={fetchContainers} />
+        <div className="container mx-auto p-6 bg-gray-50 min-h-screen">
+            <div className="flex justify-between items-center mb-8">
+                <div className="flex items-center gap-4">
+                    <h1 className="text-3xl font-bold text-gray-800">Docker Containers</h1>
+                    <RefreshButton onRefresh={fetchContainers} className="hover:rotate-180 transition-transform duration-500" />
                 </div>
                 <Button
                     onClick={() => setIsCreateModalOpen(true)}
-                    className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-2"
+                    className="bg-gradient-to-r from-green-500 to-green-600 text-white flex items-center gap-2 px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300"
                 >
-                    <FiPlus /> Create Container
+                    <FiPlus className="text-lg" /> Create Container
                 </Button>
-            </div>
-
-            <div className="mb-6">
-                <div className="relative">
-                    <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Search containers by name, image, or state..."
-                        className="pl-10 pr-4 py-2 w-full border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
             </div>
 
             {notification && (
@@ -183,85 +184,128 @@ const Docker_Containers = () => {
                     message={notification.message}
                     type={notification.type}
                     onClose={() => setNotification(null)}
+                    className="rounded-lg shadow-lg"
                 />
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="mb-8">
+                <div className="relative max-w-2xl mx-auto">
+                    <FiSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-xl" />
+                    <input
+                        type="text"
+                        placeholder="Search containers by name, image, or state..."
+                        className="pl-12 pr-4 py-3 w-full border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 text-gray-700 bg-white shadow-sm"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredContainers.map(container => (
-                    <div key={container.Id} className="bg-white p-4 rounded-lg shadow-md">
-                        <h3 className="font-bold mb-2">
-                            {container.Names[0].replace('/', '')}
-                        </h3>
-                        <p className="text-sm mb-2">Image: {container.Image}</p>
-                        <p className="text-sm mb-2">
-                            Status: <span className={`font-medium ${
-                                container.State === 'running' ? 'text-green-600' :
-                                container.State === 'paused' ? 'text-yellow-600' :
-                                'text-red-600'
-                            }`}>{container.State}</span>
-                        </p>
-                        <div className="flex flex-wrap gap-2 mt-4">
-                            {/* Show Start button only when container is stopped/exited */}
-                            {['created', 'exited', 'dead'].includes(container.State) && (
+                    <div key={container.Id} className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100">
+                        <div className="p-6">
+                            {/* Container Name and Status */}
+                            <div className="mb-6">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h3 className="font-bold text-xl text-gray-800 truncate">
+                                        {container.Names[0].replace('/', '')}
+                                    </h3>
+                                    <span className={`px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(container.State)}`}>
+                                        {container.State}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Container Details */}
+                            <div className="space-y-3 mb-6">
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <FiBox className="text-lg" />
+                                    <p className="text-sm truncate">{container.Image}</p>
+                                </div>
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <FiHardDrive className="text-lg" />
+                                    <p className="text-sm font-medium">{container.Id.substring(0, 12)}</p>
+                                </div>
+                                {container.Ports && container.Ports.length > 0 && (
+                                    <div className="flex items-center gap-2 text-gray-600">
+                                        <FiActivity className="text-lg" />
+                                        <div className="flex flex-wrap gap-2">
+                                            {container.Ports.map((port, index) => (
+                                                <span key={index} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-full border border-blue-100">
+                                                    {port.PublicPort}:{port.PrivatePort}/{port.Type}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="space-y-3">
+                                {/* Container Actions based on state */}
+                                {['created', 'exited', 'dead'].includes(container.State) && (
+                                    <Button
+                                        onClick={() => handleContainerAction(container.Id, 'start')}
+                                        className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
+                                        disabled={isLoading}
+                                    >
+                                        <FiPlay className="text-lg" /> Start
+                                    </Button>
+                                )}
+
+                                {container.State === 'running' && (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button
+                                            onClick={() => handleContainerAction(container.Id, 'stop')}
+                                            className="bg-gradient-to-r from-yellow-500 to-yellow-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
+                                            disabled={isLoading}
+                                        >
+                                            <FiSquare className="text-lg" /> Stop
+                                        </Button>
+                                        <Button
+                                            onClick={() => handleContainerAction(container.Id, 'pause')}
+                                            className="bg-gradient-to-r from-blue-500 to-blue-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
+                                            disabled={isLoading}
+                                        >
+                                            <FiPause className="text-lg" /> Pause
+                                        </Button>
+                                        <Button
+                                            onClick={() => handleContainerAction(container.Id, 'restart')}
+                                            className="bg-gradient-to-r from-purple-500 to-purple-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
+                                            disabled={isLoading}
+                                        >
+                                            <FiRefreshCw className="text-lg" /> Restart
+                                        </Button>
+                                        <Button
+                                            onClick={() => handleContainerAction(container.Id, 'kill')}
+                                            className="bg-gradient-to-r from-red-500 to-red-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
+                                            disabled={isLoading}
+                                        >
+                                            <FiZap className="text-lg" /> Kill
+                                        </Button>
+                                    </div>
+                                )}
+
+                                {container.State === 'paused' && (
+                                    <Button
+                                        onClick={() => handleContainerAction(container.Id, 'unpause')}
+                                        className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
+                                        disabled={isLoading}
+                                    >
+                                        <FiPlay className="text-lg" /> Unpause
+                                    </Button>
+                                )}
+
+                                {/* Delete Button */}
                                 <Button
-                                    onClick={() => handleContainerAction(container.Id, 'start')}
-                                    className="flex-1 bg-green-500 text-white flex items-center justify-center gap-1"
+                                    onClick={() => handleDeleteContainer(container.Id)}
+                                    className="w-full bg-gradient-to-r from-red-500 to-red-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
+                                    disabled={isLoading}
                                 >
-                                    <FiPlay /> Start
+                                    <FiTrash2 className="text-lg" /> Delete
                                 </Button>
-                            )}
-
-                            {/* Show Stop, Pause, Restart, and Kill buttons only when container is running */}
-                            {container.State === 'running' && (
-                                <>
-                                    <Button
-                                        onClick={() => handleContainerAction(container.Id, 'stop')}
-                                        className="flex-1 bg-yellow-500 text-white flex items-center justify-center gap-1"
-                                    >
-                                        <FiSquare /> Stop
-                                    </Button>
-                                    <Button
-                                        onClick={() => handleContainerAction(container.Id, 'pause')}
-                                        className="flex-1 bg-blue-500 text-white flex items-center justify-center gap-1"
-                                    >
-                                        <FiPause /> Pause
-                                    </Button>
-                                    <Button
-                                        onClick={() => handleContainerAction(container.Id, 'restart')}
-                                        className="flex-1 bg-purple-500 text-white flex items-center justify-center gap-1"
-                                    >
-                                        <FiRefreshCw /> Restart
-                                    </Button>
-                                    <Button
-                                        onClick={() => handleContainerAction(container.Id, 'kill')}
-                                        className="flex-1 bg-red-500 text-white flex items-center justify-center gap-1"
-                                    >
-                                        <FiZap /> Kill
-                                    </Button>
-                                </>
-                            )}
-
-                            {/* Show Unpause button only when container is paused */}
-                            {container.State === 'paused' && (
-                                <Button
-                                    onClick={() => handleContainerAction(container.Id, 'unpause')}
-                                    className="flex-1 bg-blue-500 text-white flex items-center justify-center gap-1"
-                                >
-                                    <FiPlay /> Unpause
-                                </Button>
-                            )}
-
-                            {/* Always show Delete button, but with different styling based on state */}
-                            <Button
-                                onClick={() => handleDeleteContainer(container.Id)}
-                                className={`flex-1 ${
-                                    container.State === 'running' 
-                                        ? 'bg-red-400 hover:bg-red-500' 
-                                        : 'bg-red-500 hover:bg-red-600'
-                                } text-white flex items-center justify-center gap-1`}
-                            >
-                                <FiTrash2 /> Delete
-                            </Button>
+                            </div>
                         </div>
                     </div>
                 ))}
