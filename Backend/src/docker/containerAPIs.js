@@ -127,43 +127,4 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
-// Get container logs
-router.get('/:id/logs', async (req, res) => {
-    try {
-        const opts = {
-            follow: bool(req.query.follow),
-            stdout: bool(req.query.stdout, true),
-            stderr: bool(req.query.stderr, true),
-            since: req.query.since ? Number(req.query.since) : 0,
-            until: req.query.until ? Number(req.query.until) : 0,
-            timestamps: bool(req.query.timestamps),
-            tail: req.query.tail !== undefined ? req.query.tail : 'all'
-        };
-        const stream = await docker.getContainer(req.params.id).logs({...opts, stream: opts.follow });
-        
-        if (opts.follow) {
-            res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
-            stream.pipe(res);
-        } else {
-            const chunks = [];
-            stream.on('data', c => chunks.push(c));
-            stream.on('end', () => res.type('text/plain').send(Buffer.concat(chunks)));
-        }
-    } catch (error) {
-        handleError(res, error);
-    }
-});
-
-// Get container stats
-router.get('/:id/stats', async (req, res) => {
-    try {
-        const stream = await docker.getContainer(req.params.id)
-            .stats({ stream: bool(req.query.stream, true) });
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        stream.pipe(res);
-    } catch (error) {
-        handleError(res, error);
-    }
-});
-
 module.exports = router;

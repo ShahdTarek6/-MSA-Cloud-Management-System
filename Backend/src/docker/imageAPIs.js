@@ -44,16 +44,6 @@ router.get('/:name/json', async (req, res) => {
     }
 });
 
-// Get image history
-router.get('/:name/history', async (req, res) => {
-    try {
-        const history = await docker.getImage(req.params.name).history();
-        res.json(history);
-    } catch (error) {
-        handleError(res, error);
-    }
-});
-
 // Dockerfile Routes
 const dockerfileRouter = express.Router();
 
