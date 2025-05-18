@@ -29,6 +29,7 @@ function VirtualMachine() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
   const [editVM, setEditVM] = useState(null);
+  const [originalEditVM, setOriginalEditVM] = useState(null); // Track original VM data for editing
 
   const showNotification = (message, type = 'success') => {
     setNotification({ show: true, message, type });
@@ -178,7 +179,9 @@ function VirtualMachine() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await axios.put(`http://localhost:3000/api/qemu/vms/update/${editVM.name}`, editVM);
+      // Use the original VM's name for the URL, not the possibly changed name in editVM
+      const oldVmName = originalEditVM?.name || editVM.name;
+      await axios.put(`http://localhost:3000/api/qemu/vms/edit/${oldVmName}`, editVM);
       showNotification('Virtual Machine updated successfully!');
       setEditVM(null);
       fetchData();
@@ -227,7 +230,10 @@ function VirtualMachine() {
                 <VMCard
                   key={vm.name || index}
                   vm={vm}
-                  onEdit={setEditVM}
+                  onEdit={(vmData) => {
+                    setEditVM(vmData);
+                    setOriginalEditVM(vmData); // Set original VM data when editing starts
+                  }}
                   onStart={startVM}
                   onStop={stopVM}
                   onDelete={setDeleteConfirm}
@@ -291,7 +297,8 @@ function VirtualMachine() {
               <FormInput
                 label="VM Name"
                 value={editVM.name}
-                disabled
+                onChange={e => setEditVM({ ...editVM, name: e.target.value })}
+                required
               />
               <div className="grid grid-cols-2 gap-4">
                 <FormInput

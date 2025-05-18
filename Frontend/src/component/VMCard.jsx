@@ -35,7 +35,7 @@ export function VMCard({ vm, onEdit, onStart, onStop, onDelete }) {
           onStart={() => onStart(vm.name)}
           onStop={() => onStop(vm.name)}
           onDelete={() => onDelete(vm)}
-          status={vm.status}
+          status={vm.pid ? 'running' : 'stopped'}
         />
       </div>
     </div>

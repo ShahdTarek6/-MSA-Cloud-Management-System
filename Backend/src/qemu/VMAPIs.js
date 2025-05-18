@@ -51,21 +51,23 @@ router.post('/start/:name', (req, res) => {
 
 //update VM
 router.put('/edit/:name', (req, res) => {
-  const name = req.params.name;
-  const vmPath = path.join(VM_DIR, `${name}.json`);
+  const oldName = req.params.name;
+  const oldVmPath = path.join(VM_DIR, `${oldName}.json`);
 
-  if (!fs.existsSync(vmPath)) {
+  if (!fs.existsSync(oldVmPath)) {
     return res.status(404).json({ error: 'VM not found' });
   }
 
-  const allowedFields = ['cpu', 'memory'];
-  const vmData = JSON.parse(fs.readFileSync(vmPath));
+  const allowedFields = ['cpu', 'memory', 'name'];
+  const vmData = JSON.parse(fs.readFileSync(oldVmPath));
   let updated = false;
 
   for (const key of allowedFields) {
-    if (req.body[key]) {
-      vmData[key] = req.body[key];
-      updated = true;
+    if (req.body[key] !== undefined && req.body[key] !== null) {
+      if (key !== 'name' || req.body[key] !== oldName) {
+        vmData[key] = req.body[key];
+        updated = true;
+      }
     }
   }
 
@@ -73,8 +75,17 @@ router.put('/edit/:name', (req, res) => {
     return res.status(400).json({ error: 'No valid fields to update' });
   }
 
-  fs.writeFileSync(vmPath, JSON.stringify(vmData, null, 2));
-  res.json({ message: `✏️ VM "${name}" updated`, vm: vmData });
+  let newVmPath = oldVmPath;
+  if (req.body.name && req.body.name !== oldName) {
+    newVmPath = path.join(VM_DIR, `${req.body.name}.json`);
+    if (fs.existsSync(newVmPath)) {
+      return res.status(409).json({ error: 'A VM with the new name already exists.' });
+    }
+    fs.renameSync(oldVmPath, newVmPath);
+  }
+
+  fs.writeFileSync(newVmPath, JSON.stringify(vmData, null, 2));
+  res.json({ message: `✏️ VM "${req.body.name || oldName}" updated`, vm: vmData });
 });
 
 // Create VM
@@ -171,6 +182,40 @@ router.delete('/delete/:name', (req, res) => {
   res.json({
     message: `🗑️ VM "${name}" deleted${killed ? '' : ' (process was already stopped)'}.`
   });
+});
+
+
+// Stop VM
+router.post('/stop/:name', (req, res) => {
+  const name = req.params.name;
+  const vmPath = path.join(VM_DIR, `${name}.json`);
+
+  if (!fs.existsSync(vmPath)) {
+    return res.status(404).json({ error: 'VM not found' });
+  }
+
+  const vmData = JSON.parse(fs.readFileSync(vmPath));
+
+  if (!vmData.pid) {
+    return res.status(400).json({ error: 'No running process associated with this VM.' });
+  }
+
+  try {
+    process.kill(vmData.pid);
+  } catch (e) {
+    if (e.code === 'ESRCH') {
+      console.warn(`⚠️ VM process PID ${vmData.pid} already not running.`);
+    } else {
+      return res.status(500).json({ error: `Failed to stop VM: ${e.message}` });
+    }
+  }
+
+  // Clean up the pid and startedAt fields
+  delete vmData.pid;
+  delete vmData.startedAt;
+  fs.writeFileSync(vmPath, JSON.stringify(vmData, null, 2));
+
+  res.json({ message: `🔴 VM "${name}" stopped` });
 });
 
 module.exports = router;
