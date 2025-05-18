@@ -3,7 +3,7 @@ import { Button } from '../component/Button';
 import { FormInput } from '../component/FormInput';
 import { Modal } from '../component/Modal';
 import { Notification } from '../component/Notification';
-import { FiUpload, FiDownload, FiTrash2, FiSearch, FiTag, FiBox, FiPlay, FiPause, FiSquare, FiPlus, FiRefreshCw, FiZap } from 'react-icons/fi';
+import { FiUpload, FiDownload, FiTrash2, FiSearch, FiTag, FiBox, FiPlay, FiPause, FiSquare, FiPlus, FiRefreshCw, FiZap, FiClock, FiHardDrive, FiCalendar } from 'react-icons/fi';
 import RefreshButton from '../component/RefreshButton';
 
 // Helper function to get filename from path
@@ -326,30 +326,30 @@ const Docker_Images = () => {
     };
 
     return (
-        <div className="container mx-auto p-4">
-            <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-bold">Docker Images</h1>
-                    <RefreshButton onRefresh={fetchImages} />
+        <div className="container mx-auto p-6 bg-gray-50 min-h-screen">
+            <div className="flex justify-between items-center mb-8">
+                <div className="flex items-center gap-4">
+                    <h1 className="text-3xl font-bold text-gray-800">Docker Images</h1>
+                    <RefreshButton onRefresh={fetchImages} className="hover:rotate-180 transition-transform duration-500" />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                     <Button
                         onClick={() => setIsPullModalOpen(true)}
-                        className="bg-blue-500 text-white flex items-center gap-2"
+                        className="bg-gradient-to-r from-blue-500 to-blue-600 text-white flex items-center gap-2 px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300"
                     >
-                        <FiDownload /> Pull Image
+                        <FiDownload className="text-lg" /> Pull Image
                     </Button>
                     <Button
                         onClick={openBuildModal}
-                        className="bg-purple-600 text-white flex items-center gap-2"
+                        className="bg-gradient-to-r from-purple-500 to-purple-600 text-white flex items-center gap-2 px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300"
                     >
-                        <FiBox /> Build from Dockerfile
+                        <FiBox className="text-lg" /> Build from Dockerfile
                     </Button>
                     <Button
                         onClick={() => window.location.href = '/docker-hub'}
-                        className="bg-green-500 text-white flex items-center gap-2"
+                        className="bg-gradient-to-r from-green-500 to-green-600 text-white flex items-center gap-2 px-4 py-2 rounded-lg shadow-md hover:shadow-lg transition-all duration-300"
                     >
-                        <FiSearch /> Search Docker Hub
+                        <FiSearch className="text-lg" /> Search Docker Hub
                     </Button>
                 </div>
             </div>
@@ -359,48 +359,51 @@ const Docker_Images = () => {
                     message={notification.message}
                     type={notification.type}
                     onClose={() => setNotification(null)}
+                    className="rounded-lg shadow-lg"
                 />
             )}
 
-            <div className="mb-6">
-                <div className="relative">
-                    <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <div className="mb-8">
+                <div className="relative max-w-2xl mx-auto">
+                    <FiSearch className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-xl" />
                     <input
                         type="text"
                         placeholder="Search images by name, tag, or ID..."
-                        className="pl-10 pr-4 py-2 w-full border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="pl-12 pr-4 py-3 w-full border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 text-gray-700 bg-white shadow-sm"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredImages.map(image => (
-                    <div key={image.Id} className="bg-white p-4 rounded-lg shadow-md">
-                        {/* Image Name and ID Section */}
-                        <div className="mb-4">
-                            <h3 className="font-bold text-lg text-gray-800 mb-2">
-                                {/* Show first tag as main name, fallback to ID if no tags */}
-                                {(image.RepoTags && image.RepoTags[0] !== '<none>:<none>' 
-                                    ? image.RepoTags[0] 
-                                    : `Untagged Image`
-                                )}
-                            </h3>
-                            <p className="text-sm text-gray-600">
-                                <span className="font-medium">ID:</span> {image.Id.substring(7, 19)}
-                            </p>
+                    <div key={image.Id} className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100">
+                        <div className="p-6">
+                            {/* Image Name and ID Section */}
+                            <div className="mb-6">
+                                <h3 className="font-bold text-xl text-gray-800 mb-2 truncate">
+                                    {(image.RepoTags && image.RepoTags[0] !== '<none>:<none>' 
+                                        ? image.RepoTags[0] 
+                                        : `Untagged Image`
+                                    )}
+                                </h3>
+                                <div className="flex items-center gap-2 text-gray-500">
+                                    <FiHardDrive className="text-lg" />
+                                    <p className="text-sm font-medium">{image.Id.substring(7, 19)}</p>
+                                </div>
+                            </div>
                             
-                            {/* Additional Tags (if any) */}
+                            {/* Additional Tags */}
                             {image.RepoTags && image.RepoTags.length > 1 && (
-                                <div className="mt-2">
-                                    <p className="text-sm font-medium text-gray-600 mb-1">Additional Tags:</p>
+                                <div className="mb-6">
+                                    <p className="text-sm font-medium text-gray-600 mb-2">Additional Tags:</p>
                                     <div className="flex flex-wrap gap-2">
                                         {image.RepoTags.slice(1).map(tag => (
                                             tag !== '<none>:<none>' && (
                                                 <span
                                                     key={tag}
-                                                    className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
+                                                    className="px-3 py-1 bg-blue-50 text-blue-600 text-xs rounded-full border border-blue-100 font-medium"
                                                 >
                                                     {tag}
                                                 </span>
@@ -409,91 +412,94 @@ const Docker_Images = () => {
                                     </div>
                                 </div>
                             )}
-                        </div>
 
-                        {/* Image Details */}
-                        <div className="space-y-2 mb-4">
-                            <p className="text-sm text-gray-600">
-                                <span className="font-medium">Size:</span> {formatBytes(image.Size)}
-                            </p>
-                            <p className="text-sm text-gray-600">
-                                <span className="font-medium">Created:</span> {new Date(image.Created * 1000).toLocaleDateString()}
-                            </p>
-                        </div>
-                        
-                        {/* Action Buttons */}
-                        <div className="flex flex-wrap gap-2 mt-4">
+                            {/* Image Details */}
+                            <div className="space-y-3 mb-6">
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <FiHardDrive className="text-lg" />
+                                    <p className="text-sm">{formatBytes(image.Size)}</p>
+                                </div>
+                                <div className="flex items-center gap-2 text-gray-600">
+                                    <FiCalendar className="text-lg" />
+                                    <p className="text-sm">{new Date(image.Created * 1000).toLocaleDateString()}</p>
+                                </div>
+                            </div>
+                            
                             {/* Container Actions */}
-                            {!runningContainers[image.Id] ? (
-                                <Button
-                                    onClick={() => handleContainerAction(image.Id, 'start')}
-                                    className="flex-1 bg-green-500 text-white flex items-center justify-center gap-1"
-                                    disabled={isLoading}
-                                >
-                                    <FiPlay /> Build Container
-                                </Button>
-                            ) : runningContainers[image.Id].state === 'running' ? (
-                                <>
+                            <div className="space-y-3">
+                                {!runningContainers[image.Id] ? (
                                     <Button
-                                        onClick={() => handleContainerAction(image.Id, 'stop')}
-                                        className="flex-1 bg-yellow-500 text-white flex items-center justify-center gap-1"
+                                        onClick={() => handleContainerAction(image.Id, 'start')}
+                                        className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
                                         disabled={isLoading}
                                     >
-                                        <FiSquare /> Stop
+                                        <FiPlay className="text-lg" /> Build Container
                                     </Button>
+                                ) : runningContainers[image.Id].state === 'running' ? (
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button
+                                            onClick={() => handleContainerAction(image.Id, 'stop')}
+                                            className="bg-gradient-to-r from-yellow-500 to-yellow-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
+                                            disabled={isLoading}
+                                        >
+                                            <FiSquare className="text-lg" /> Stop
+                                        </Button>
+                                        <Button
+                                            onClick={() => handleContainerAction(image.Id, 'pause')}
+                                            className="bg-gradient-to-r from-blue-500 to-blue-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
+                                            disabled={isLoading}
+                                        >
+                                            <FiPause className="text-lg" /> Pause
+                                        </Button>
+                                        <Button
+                                            onClick={() => handleContainerAction(image.Id, 'restart')}
+                                            className="bg-gradient-to-r from-purple-500 to-purple-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
+                                            disabled={isLoading}
+                                        >
+                                            <FiRefreshCw className="text-lg" /> Restart
+                                        </Button>
+                                        <Button
+                                            onClick={() => handleContainerAction(image.Id, 'kill')}
+                                            className="bg-gradient-to-r from-red-500 to-red-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
+                                            disabled={isLoading}
+                                        >
+                                            <FiZap className="text-lg" /> Kill
+                                        </Button>
+                                    </div>
+                                ) : runningContainers[image.Id].state === 'paused' ? (
                                     <Button
-                                        onClick={() => handleContainerAction(image.Id, 'pause')}
-                                        className="flex-1 bg-blue-500 text-white flex items-center justify-center gap-1"
+                                        onClick={() => handleContainerAction(image.Id, 'unpause')}
+                                        className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
                                         disabled={isLoading}
                                     >
-                                        <FiPause /> Pause
+                                        <FiPlay className="text-lg" /> Unpause
                                     </Button>
+                                ) : (
                                     <Button
-                                        onClick={() => handleContainerAction(image.Id, 'restart')}
-                                        className="flex-1 bg-purple-500 text-white flex items-center justify-center gap-1"
+                                        onClick={() => handleContainerAction(image.Id, 'start')}
+                                        className="w-full bg-gradient-to-r from-green-500 to-green-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
                                         disabled={isLoading}
                                     >
-                                        <FiRefreshCw /> Restart
+                                        <FiPlay className="text-lg" /> Start
                                     </Button>
-                                    <Button
-                                        onClick={() => handleContainerAction(image.Id, 'kill')}
-                                        className="flex-1 bg-red-500 text-white flex items-center justify-center gap-1"
-                                        disabled={isLoading}
-                                    >
-                                        <FiZap /> Kill
-                                    </Button>
-                                </>
-                            ) : runningContainers[image.Id].state === 'paused' ? (
-                                <Button
-                                    onClick={() => handleContainerAction(image.Id, 'unpause')}
-                                    className="flex-1 bg-blue-500 text-white flex items-center justify-center gap-1"
-                                    disabled={isLoading}
-                                >
-                                    <FiPlay /> Unpause
-                                </Button>
-                            ) : (
-                                <Button
-                                    onClick={() => handleContainerAction(image.Id, 'start')}
-                                    className="flex-1 bg-green-500 text-white flex items-center justify-center gap-1"
-                                    disabled={isLoading}
-                                >
-                                    <FiPlay /> Start
-                                </Button>
-                            )}
+                                )}
 
-                            {/* Image Actions */}
-                            <Button
-                                onClick={() => openTagModal(image)}
-                                className="flex-1 bg-blue-500 text-white flex items-center justify-center gap-1"
-                            >
-                                <FiTag /> Tag
-                            </Button>
-                            <Button
-                                onClick={() => handleDeleteImage(image.Id)}
-                                className="flex-1 bg-red-500 text-white flex items-center justify-center gap-1"
-                            >
-                                <FiTrash2 /> Delete
-                            </Button>
+                                {/* Image Actions */}
+                                <div className="flex gap-2">
+                                    <Button
+                                        onClick={() => openTagModal(image)}
+                                        className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
+                                    >
+                                        <FiTag className="text-lg" /> Tag
+                                    </Button>
+                                    <Button
+                                        onClick={() => handleDeleteImage(image.Id)}
+                                        className="flex-1 bg-gradient-to-r from-red-500 to-red-600 text-white flex items-center justify-center gap-2 py-2 rounded-lg shadow-sm hover:shadow-md transition-all duration-300"
+                                    >
+                                        <FiTrash2 className="text-lg" /> Delete
+                                    </Button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 ))}
