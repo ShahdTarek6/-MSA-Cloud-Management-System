@@ -53,7 +53,9 @@ function VirtualDisk() {
   const handleEditSubmit = async (updatedDisk) => {
     setIsLoading(true);
     try {
-      await axios.put(`http://localhost:3000/api/qemu/disks/update/${updatedDisk.name}`, updatedDisk);
+      // Use the original disk's name and format for the URL
+      const oldFilename = editDisk.name + '.' + editDisk.format;
+      await axios.put(`http://localhost:3000/api/qemu/disks/update/${oldFilename}`, updatedDisk);
       showNotification('Virtual Disk updated successfully!');
       setEditDisk(null);
       fetchData();
